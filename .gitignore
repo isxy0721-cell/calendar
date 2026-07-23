@@ -1,0 +1,44 @@
+# ===================== Qt CMake 编译构建目录 =====================
+build-*/
+build/
+Debug/
+Release/
+cmake-build-*
+
+# ===================== Qt Creator 本地用户配置（本机专属，无需提交） =====================
+*.user
+*.user.*
+CMakeLists.txt.user
+*.autosave
+.qmake.stash
+
+# ===================== CMake 自动生成编译缓存文件 =====================
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+qtcsettings.cmake
+Testing/
+install_manifest.txt
+
+# ===================== C++ 编译产物、目标程序 =====================
+*.o
+*.obj
+*.so
+*.a
+*.out
+*.exe
+*.dll
+*.app
+
+# ===================== 程序运行生成数据/日志 =====================
+*.log
+*.json
+*.tmp
+temp/
+data/
+cache/
+
+# ===================== 系统隐藏垃圾文件 =====================
+.DS_Store
+Thumbs.db
