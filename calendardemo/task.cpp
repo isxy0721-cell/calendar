@@ -1,64 +1,57 @@
 #include "task.h"
 
-Task::Task() : m_priority(Medium), m_category(Life) {}
+Task::Task() = default;
 
-Task::Task(QString id, QString name, QDateTime startTime,
-           Priority priority, Category category, QDateTime remindTime)
-    : m_id(id), m_name(name), m_startTime(startTime),
-      m_priority(priority), m_category(category), m_remindTime(remindTime)
+Task::Task(const QString &id, const QString &name, const QDateTime &startTime,
+           Priority priority, Category category, const QDateTime &remindTime)
+    : m_id(id), m_name(name.trimmed()), m_startTime(startTime), m_priority(priority),
+      m_category(category), m_remindTime(remindTime)
 {
-    // 默认值：提醒时间 = 开始时间提前5分钟
     if (!m_remindTime.isValid())
         m_remindTime = startTime.addSecs(-5 * 60);
 }
 
 QJsonObject Task::toJson() const
 {
-    QJsonObject obj;
-    obj["id"] = m_id;
-    obj["name"] = m_name;
-    obj["startTime"] = m_startTime.toString(Qt::ISODate);
-    obj["priority"] = m_priority;
-    obj["category"] = m_category;
-    obj["remindTime"] = m_remindTime.toString(Qt::ISODate);
-    return obj;
+    return {{"id", m_id}, {"name", m_name},
+            {"startTime", m_startTime.toString(Qt::ISODate)},
+            {"priority", static_cast<int>(m_priority)},
+            {"category", static_cast<int>(m_category)},
+            {"remindTime", m_remindTime.toString(Qt::ISODate)}};
 }
 
-Task Task::fromJson(const QJsonObject &obj)
+Task Task::fromJson(const QJsonObject &object)
 {
-    Task task;
-    task.m_id = obj["id"].toString();
-    task.m_name = obj["name"].toString();
-    task.m_startTime = QDateTime::fromString(obj["startTime"].toString(), Qt::ISODate);
-    task.m_priority = static_cast<Priority>(obj["priority"].toInt());
-    task.m_category = static_cast<Category>(obj["category"].toInt());
-    task.m_remindTime = QDateTime::fromString(obj["remindTime"].toString(), Qt::ISODate);
-    return task;
+    return Task(object.value("id").toString(), object.value("name").toString(),
+                QDateTime::fromString(object.value("startTime").toString(), Qt::ISODate),
+                static_cast<Priority>(object.value("priority").toInt(static_cast<int>(Priority::Medium))),
+                static_cast<Category>(object.value("category").toInt(static_cast<int>(Category::Life))),
+                QDateTime::fromString(object.value("remindTime").toString(), Qt::ISODate));
 }
 
-QString Task::getId() const { return m_id; }
-QString Task::getName() const { return m_name; }
-QDateTime Task::getStartTime() const { return m_startTime; }
-Priority Task::getPriority() const { return m_priority; }
-Category Task::getCategory() const { return m_category; }
-QDateTime Task::getRemindTime() const { return m_remindTime; }
+QString Task::id() const { return m_id; }
+QString Task::name() const { return m_name; }
+QDateTime Task::startTime() const { return m_startTime; }
+Priority Task::priority() const { return m_priority; }
+Category Task::category() const { return m_category; }
+QDateTime Task::remindTime() const { return m_remindTime; }
 
-QString Task::priorityStr() const
+QString Task::priorityText() const
 {
     switch (m_priority) {
-    case High: return "高";
-    case Medium: return "中";
-    case Low: return "低";
+    case Priority::High: return QStringLiteral("高");
+    case Priority::Medium: return QStringLiteral("中");
+    case Priority::Low: return QStringLiteral("低");
     }
-    return "中";
+    return {};
 }
 
-QString Task::categoryStr() const
+QString Task::categoryText() const
 {
     switch (m_category) {
-    case Study: return "学习";
-    case Entertainment: return "娱乐";
-    case Life: return "生活";
+    case Category::Study: return QStringLiteral("学习");
+    case Category::Entertainment: return QStringLiteral("娱乐");
+    case Category::Life: return QStringLiteral("生活");
     }
-    return "生活";
+    return {};
 }

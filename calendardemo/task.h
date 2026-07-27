@@ -1,33 +1,45 @@
 #ifndef TASK_H
 #define TASK_H
-#include <QString>
+
 #include <QDateTime>
 #include <QJsonObject>
+#include <QList>
+#include <QMetaType>
+#include <QString>
 
-enum Priority{High,Medium,Low};
-enum Category{Study,Entertainment,Life};
+enum class Priority { High, Medium, Low };
+enum class Category { Study, Entertainment, Life };
+
 class Task
 {
 public:
     Task();
-    Task(QString id,QString name,QDateTime starttime,Priority priority=Medium,Category category=Life,QDateTime remindTime=QDateTime());
+    Task(const QString &id, const QString &name, const QDateTime &startTime,
+         Priority priority = Priority::Medium, Category category = Category::Life,
+         const QDateTime &remindTime = QDateTime());
+
     QJsonObject toJson() const;
-    static Task fromJson(const QJsonObject &obj);
-    QString getId() const;
-    QString getName() const;
-    QDateTime getStartTIme() const;
-    Priority getPriority() const;
-    Category getCategory() const;
-    QDateTime getRemindTime() const;
-    QString priorityStr() const;
-    QString categoryStr() const;
+    static Task fromJson(const QJsonObject &object);
+
+    QString id() const;
+    QString name() const;
+    QDateTime startTime() const;
+    Priority priority() const;
+    Category category() const;
+    QDateTime remindTime() const;
+    QString priorityText() const;
+    QString categoryText() const;
+
 private:
     QString m_id;
     QString m_name;
     QDateTime m_startTime;
-    Priority m_priority;
-    Category m_category;
+    Priority m_priority = Priority::Medium;
+    Category m_category = Category::Life;
     QDateTime m_remindTime;
 };
 
-#endif // TASK_H
+Q_DECLARE_METATYPE(Task)
+Q_DECLARE_METATYPE(QList<Task>)
+
+#endif
