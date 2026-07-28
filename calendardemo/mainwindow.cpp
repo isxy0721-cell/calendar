@@ -1,13 +1,23 @@
 #include "mainwindow.h"
 
+#include <QApplication>
 #include <QComboBox>
 #include <QDateEdit>
 #include <QDateTimeEdit>
+#include <QFileDialog>
 #include <QFormLayout>
+#include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QMediaPlayer>
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#include <QAudioOutput>
+#endif
+#include <QProcess>
+#include <QSettings>
+#include <QUrl>
 #include <QPushButton>
 #include <QTableWidget>
 #include <QVBoxLayout>
@@ -19,6 +29,15 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     setMinimumSize(900, 560);
     setWindowTitle(QStringLiteral("我的日程管理"));
     buildLoginPage();
+    m_reminderSoundPath = QSettings().value(QStringLiteral("reminder/soundPath")).toString();
+    m_player = new QMediaPlayer(this);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    m_audioOutput = new QAudioOutput(this);
+    m_player->setAudioOutput(m_audioOutput);
+#endif
+    m_voiceProcess = new QProcess(this);
+    connect(m_voiceProcess, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
+            this, &MainWindow::voiceInputFinished);
     m_reminderWorker = new ReminderWorker;
     m_reminderWorker->moveToThread(&m_reminderThread);
     connect(&m_reminderThread, &QThread::started, m_reminderWorker, &ReminderWorker::start);
@@ -91,7 +110,13 @@ void MainWindow::buildSchedulePage()
     form->addRow(QStringLiteral("分类："), m_categoryBox);
     layout->addLayout(form);
     auto *addButton = new QPushButton(QStringLiteral("添加任务并自动保存"));
-    layout->addWidget(addButton);
+    auto *voiceButton = new QPushButton(QStringLiteral("语音识别填入任务名称"));
+    auto *soundButton = new QPushButton(QStringLiteral("设置提醒铃声"));
+    auto *buttons = new QHBoxLayout;
+    buttons->addWidget(addButton);
+    buttons->addWidget(voiceButton);
+    buttons->addWidget(soundButton);
+    layout->addLayout(buttons);
 
     auto *filterLayout = new QHBoxLayout;
     filterLayout->addWidget(new QLabel(QStringLiteral("显示日期：")));
@@ -111,6 +136,8 @@ void MainWindow::buildSchedulePage()
     m_taskTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     layout->addWidget(m_taskTable);
     connect(addButton, &QPushButton::clicked, this, &MainWindow::addTask);
+    connect(voiceButton, &QPushButton::clicked, this, &MainWindow::startVoiceInput);
+    connect(soundButton, &QPushButton::clicked, this, &MainWindow::chooseReminderSound);
     connect(m_deleteButton, &QPushButton::clicked, this, &MainWindow::deleteTask);
     connect(m_filterDateEdit, &QDateEdit::dateChanged, this, &MainWindow::refreshTable);
     setCentralWidget(page);
@@ -196,6 +223,63 @@ void MainWindow::updateWorkerTasks()
 
 void MainWindow::showReminder(const Task &task)
 {
+    if (m_reminderSoundPath.isEmpty()) {
+        QApplication::beep();
+    } else {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+        m_player->setSource(QUrl::fromLocalFile(m_reminderSoundPath));
+#else
+        m_player->setMedia(QUrl::fromLocalFile(m_reminderSoundPath));
+#endif
+        m_player->play();
+    }
     QMessageBox::information(this, QStringLiteral("任务提醒"),
                              QStringLiteral("提醒：%1\n开始时间：%2").arg(task.name(), task.startTime().toString("yyyy-MM-dd HH:mm")));
+}
+
+void MainWindow::chooseReminderSound()
+{
+    const QString file = QFileDialog::getOpenFileName(
+        this, QStringLiteral("选择提醒音频"), m_reminderSoundPath,
+        QStringLiteral("音频文件 (*.wav *.mp3 *.ogg *.m4a);;所有文件 (*.*)"));
+    if (file.isEmpty()) return;
+    m_reminderSoundPath = file;
+    QSettings().setValue(QStringLiteral("reminder/soundPath"), file);
+    QMessageBox::information(this, QStringLiteral("设置成功"), QStringLiteral("提醒铃声已保存。"));
+}
+
+void MainWindow::startVoiceInput()
+{
+#ifdef Q_OS_WIN
+    if (m_voiceProcess->state() != QProcess::NotRunning) return;
+    const QString script = QStringLiteral(
+        "$ErrorActionPreference='Stop'; "
+        "Add-Type -AssemblyName System.Speech; "
+        "$r=New-Object System.Speech.Recognition.SpeechRecognitionEngine; "
+        "$r.LoadGrammar((New-Object System.Speech.Recognition.DictationGrammar)); "
+        "[Console]::OutputEncoding=New-Object System.Text.UTF8Encoding; "
+        "$x=$r.Recognize([TimeSpan]::FromSeconds(8)); "
+        "if($x){Write-Output ('RESULT:'+$x.Text)}");
+    m_voiceProcess->start(QStringLiteral("powershell.exe"),
+                          {QStringLiteral("-NoProfile"), QStringLiteral("-ExecutionPolicy"), QStringLiteral("Bypass"),
+                           QStringLiteral("-Command"), script});
+    QMessageBox::information(this, QStringLiteral("语音输入"),
+                             QStringLiteral("请在 8 秒内说出任务名称。识别完成后会自动填入名称输入框。"));
+#else
+    QMessageBox::information(this, QStringLiteral("语音输入"),
+                             QStringLiteral("当前实现使用 Windows 系统语音识别，仅支持 Windows。"));
+#endif
+}
+
+void MainWindow::voiceInputFinished(int exitCode, QProcess::ExitStatus exitStatus)
+{
+    const QString output = QString::fromUtf8(m_voiceProcess->readAllStandardOutput()).trimmed();
+    const QString error = QString::fromLocal8Bit(m_voiceProcess->readAllStandardError()).trimmed();
+    const QString prefix = QStringLiteral("RESULT:");
+    if (exitStatus == QProcess::NormalExit && exitCode == 0 && output.startsWith(prefix)) {
+        m_taskNameEdit->setText(output.mid(prefix.size()).trimmed());
+        return;
+    }
+    QMessageBox::warning(this, QStringLiteral("语音识别失败"),
+                         QStringLiteral("未识别到语音，或系统未安装可用的语音识别语言。%1").arg(error));
 }

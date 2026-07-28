@@ -1,0 +1,204 @@
+#include "cli.h"
+
+#include "reminderworker.h"
+#include "taskmanager.h"
+#include "usermanager.h"
+
+#include <QCoreApplication>
+#include <QMetaObject>
+#include <QProcess>
+#include <QTextStream>
+#include <QThread>
+
+namespace {
+
+QTextStream out(stdout);
+QTextStream in(stdin);
+
+void printHelp()
+{
+    out << "日程管理程序（无参数启动图形界面）\n\n"
+           "命令：\n"
+           "  myschedule --help\n"
+           "  myschedule register <用户名> <口令>\n"
+           "  myschedule <用户名> <口令> addtask <任务名> <启动时间> [优先级] [分类] [提醒时间]\n"
+           "  myschedule <用户名> <口令> showtask [日期]\n"
+           "  myschedule <用户名> <口令> deltask <任务ID>\n"
+           "  myschedule run [用户名 口令]\n\n"
+           "时间格式：yyyy-MM-ddTHH:mm，例如 2026-07-27T19:30。\n"
+           "优先级：high、medium（默认）、low。分类：study、entertainment、life（默认）。\n\n"
+           "示例：\n"
+           "  myschedule register user1 password\n"
+           "  myschedule user1 password addtask \"学习 Qt\" 2026-07-27T19:30 high study 2026-07-27T19:25\n"
+           "  myschedule user1 password showtask 2026-07-27\n"
+           "  myschedule run user1 password\n";
+    out.flush();
+}
+
+QDateTime parseDateTime(const QString &text)
+{
+    QDateTime value = QDateTime::fromString(text, Qt::ISODate);
+    if (!value.isValid()) value = QDateTime::fromString(text, QStringLiteral("yyyy-MM-dd HH:mm"));
+    return value;
+}
+
+Priority parsePriority(const QString &text, bool *ok)
+{
+    const QString value = text.toLower();
+    if (value.isEmpty() || value == "medium") { *ok = true; return Priority::Medium; }
+    if (value == "high") { *ok = true; return Priority::High; }
+    if (value == "low") { *ok = true; return Priority::Low; }
+    *ok = false;
+    return Priority::Medium;
+}
+
+Category parseCategory(const QString &text, bool *ok)
+{
+    const QString value = text.toLower();
+    if (value.isEmpty() || value == "life") { *ok = true; return Category::Life; }
+    if (value == "study") { *ok = true; return Category::Study; }
+    if (value == "entertainment") { *ok = true; return Category::Entertainment; }
+    *ok = false;
+    return Category::Life;
+}
+
+void printTasks(const QList<Task> &tasks)
+{
+    const auto cell = [](const QString &text, int width) { return text.leftJustified(width, ' '); };
+    out << cell(QStringLiteral("任务ID"), 36) << "  "
+        << cell(QStringLiteral("任务名称"), 18) << "  "
+        << cell(QStringLiteral("启动时间"), 16) << "  "
+        << cell(QStringLiteral("提醒时间"), 16) << "  "
+        << cell(QStringLiteral("优先级"), 4) << "  " << QStringLiteral("分类") << '\n';
+    out << QString(110, '-') << '\n';
+    for (const Task &task : tasks) {
+        out << cell(task.id(), 36) << "  "
+            << cell(task.name(), 18) << "  "
+            << cell(task.startTime().toString("yyyy-MM-dd HH:mm"), 16) << "  "
+            << cell(task.remindTime().toString("yyyy-MM-dd HH:mm"), 16) << "  "
+            << cell(task.priorityText(), 4) << "  " << task.categoryText() << '\n';
+    }
+    out.flush();
+}
+
+bool addTaskFromArguments(const QStringList &arguments, TaskManager &manager)
+{
+    if (arguments.size() < 2 || arguments.size() > 5) {
+        out << "参数错误：addtask 需要 <任务名> <启动时间> [优先级] [分类] [提醒时间]。\n";
+        return false;
+    }
+    const QDateTime start = parseDateTime(arguments.at(1));
+    bool priorityOk = false;
+    bool categoryOk = false;
+    const Priority priority = parsePriority(arguments.value(2), &priorityOk);
+    const Category category = parseCategory(arguments.value(3), &categoryOk);
+    const QDateTime reminder = arguments.size() >= 5 ? parseDateTime(arguments.at(4)) : start.addSecs(-300);
+    if (!start.isValid() || !reminder.isValid() || !priorityOk || !categoryOk) {
+        out << "时间、优先级或分类格式无效。\n";
+        return false;
+    }
+    QString error;
+    if (!manager.addTask(arguments.at(0), start, priority, category, reminder, &error)) {
+        out << "添加失败：" << error << '\n';
+        return false;
+    }
+    out << "任务已保存。\n";
+    return true;
+}
+
+bool executeLoggedInCommand(const QStringList &arguments, TaskManager &manager)
+{
+    if (arguments.isEmpty()) return true;
+    const QString command = arguments.first().toLower();
+    if (command == "addtask") return addTaskFromArguments(arguments.mid(1), manager);
+    if (command == "showtask") {
+        const QDate date = arguments.size() >= 2 ? QDate::fromString(arguments.at(1), Qt::ISODate) : QDate::currentDate();
+        if (!date.isValid()) { out << "日期格式无效，应为 yyyy-MM-dd。\n"; return false; }
+        printTasks(manager.tasksForDate(date));
+        return true;
+    }
+    if (command == "deltask") {
+        if (arguments.size() != 2) { out << "用法：deltask <任务ID>\n"; return false; }
+        out << (manager.deleteTask(arguments.at(1)) ? "任务已删除。\n" : "删除失败：未找到任务或文件无法保存。\n");
+        return true;
+    }
+    out << "未知命令。输入 help 查看帮助。\n";
+    return false;
+}
+
+int runShell(const QString &username, TaskManager &manager)
+{
+    QThread reminderThread;
+    ReminderWorker worker;
+    qRegisterMetaType<Task>("Task");
+    qRegisterMetaType<QList<Task>>("QList<Task>");
+    worker.moveToThread(&reminderThread);
+    QObject::connect(&reminderThread, &QThread::started, &worker, &ReminderWorker::start);
+    QObject::connect(&worker, &ReminderWorker::reminderDue, [](const Task &task) {
+        QTextStream notice(stdout);
+        notice << "\n[任务提醒] " << task.name() << "，开始时间："
+               << task.startTime().toString("yyyy-MM-dd HH:mm") << '\n' << "> ";
+        notice.flush();
+    });
+    reminderThread.start();
+    QMetaObject::invokeMethod(&worker, "setTasks", Qt::QueuedConnection, Q_ARG(QList<Task>, manager.allTasks()));
+
+    out << "欢迎，" << username << "。输入 help 查看命令，exit 退出。\n> ";
+    out.flush();
+    while (true) {
+        const QString line = in.readLine().trimmed();
+        if (line.isNull()) break;
+        const QStringList command = QProcess::splitCommand(line);
+        if (command.isEmpty()) { out << "> "; out.flush(); continue; }
+        if (command.first().toLower() == "exit" || command.first().toLower() == "quit") break;
+        if (command.first().toLower() == "help") printHelp();
+        else {
+            executeLoggedInCommand(command, manager);
+            QMetaObject::invokeMethod(&worker, "setTasks", Qt::QueuedConnection, Q_ARG(QList<Task>, manager.allTasks()));
+        }
+        out << "> ";
+        out.flush();
+    }
+    reminderThread.quit();
+    reminderThread.wait();
+    return 0;
+}
+
+} // namespace
+
+int runCommandLine(QCoreApplication &application)
+{
+    const QStringList args = application.arguments().mid(1);
+    if (args.isEmpty() || args.first() == "--help" || args.first() == "-h" || args.first() == "help") {
+        printHelp();
+        return 0;
+    }
+    UserManager users;
+    if (args.first() == "register") {
+        if (args.size() != 3) { printHelp(); return 1; }
+        out << (users.registerUser(args.at(1), args.at(2)) ? "注册成功。\n" : "注册失败：用户名或口令为空，或用户名已存在。\n");
+        return 0;
+    }
+
+    QString username;
+    QString password;
+    if (args.first() == "run") {
+        if (args.size() == 3) { username = args.at(1); password = args.at(2); }
+        else if (args.size() == 1) {
+            out << "用户名："; out.flush(); username = in.readLine().trimmed();
+            out << "口令："; out.flush(); password = in.readLine();
+        } else { printHelp(); return 1; }
+        if (!users.login(username, password)) { out << "登录失败：用户名或口令不正确。\n"; return 1; }
+        TaskManager manager;
+        manager.load(username);
+        return runShell(username, manager);
+    }
+
+    if (args.size() < 3 || !users.login(args.at(0), args.at(1))) {
+        out << "登录失败，或命令参数不完整。\n";
+        return 1;
+    }
+    TaskManager manager;
+    manager.load(args.at(0));
+    return executeLoggedInCommand(args.mid(2), manager) ? 0 : 1;
+}

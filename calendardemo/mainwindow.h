@@ -5,14 +5,17 @@
 #include "taskmanager.h"
 #include "usermanager.h"
 #include <QMainWindow>
+#include <QProcess>
 #include <QThread>
 
+class QAudioOutput;
 class QDateEdit;
 class QDateTimeEdit;
 class QLineEdit;
 class QComboBox;
 class QTableWidget;
 class QPushButton;
+class QMediaPlayer;
 
 class MainWindow : public QMainWindow
 {
@@ -28,6 +31,9 @@ private slots:
     void deleteTask();
     void refreshTable();
     void showReminder(const Task &task);
+    void chooseReminderSound();
+    void startVoiceInput();
+    void voiceInputFinished(int exitCode, QProcess::ExitStatus exitStatus);
 
 private:
     void buildLoginPage();
@@ -49,6 +55,10 @@ private:
     QComboBox *m_categoryBox = nullptr;
     QTableWidget *m_taskTable = nullptr;
     QPushButton *m_deleteButton = nullptr;
+    QMediaPlayer *m_player = nullptr;
+    QAudioOutput *m_audioOutput = nullptr;
+    QProcess *m_voiceProcess = nullptr;
+    QString m_reminderSoundPath;
     QThread m_reminderThread;
     ReminderWorker *m_reminderWorker = nullptr;
 };
