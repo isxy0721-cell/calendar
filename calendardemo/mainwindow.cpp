@@ -2,14 +2,12 @@
 
 #include <QApplication>
 #include <QComboBox>
-#include <QCoreApplication>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDateEdit>
 #include <QDateTimeEdit>
 #include <QDir>
 #include <QFileDialog>
-#include <QFileInfo>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -51,6 +49,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     connect(&m_reminderThread, &QThread::started, m_reminderWorker, &ReminderWorker::start);
     connect(m_reminderWorker, &ReminderWorker::reminderDue, this, &MainWindow::showReminder);
     m_reminderThread.start();
+    m_voskTranscriber = new VoskTranscriber;
+    m_voskTranscriber->moveToThread(&m_voskThread);
+    connect(m_voskTranscriber, &VoskTranscriber::transcriptionFinished,
+            this, &MainWindow::voskTranscriptionFinished);
+    m_voskThread.start();
 }
 
 MainWindow::~MainWindow()
@@ -58,6 +61,9 @@ MainWindow::~MainWindow()
     m_reminderThread.quit();
     m_reminderThread.wait();
     delete m_reminderWorker;
+    m_voskThread.quit();
+    m_voskThread.wait();
+    delete m_voskTranscriber;
 }
 
 void MainWindow::buildLoginPage()
@@ -322,12 +328,6 @@ void MainWindow::startVoiceInput()
                              QStringLiteral("请在 8 秒内说出任务名称。识别完成后会自动填入名称输入框。"));
 #elif defined(Q_OS_LINUX)
     if (m_voiceProcess->state() != QProcess::NotRunning) return;
-    const QString script = linuxVoiceScriptPath();
-    if (script.isEmpty()) {
-        QMessageBox::warning(this, QStringLiteral("语音识别不可用"),
-                             QStringLiteral("未找到 linux_voice.py。请将它放在程序可执行文件旁或当前工作目录。"));
-        return;
-    }
     m_linuxVoiceAudioFile = QDir(QStandardPaths::writableLocation(QStandardPaths::TempLocation))
                                .filePath(QStringLiteral("myschedule-voice.wav"));
     m_linuxRecording = true;
@@ -336,7 +336,7 @@ void MainWindow::startVoiceInput()
                            QStringLiteral("-r"), QStringLiteral("16000"), QStringLiteral("-c"), QStringLiteral("1"),
                            QStringLiteral("-d"), QStringLiteral("8"), m_linuxVoiceAudioFile});
     QMessageBox::information(this, QStringLiteral("语音输入"),
-                             QStringLiteral("请在 8 秒内说出任务名称。正在使用本机离线 Vosk 识别。"));
+                             QStringLiteral("请在 8 秒内说出任务名称。正在使用 C++ Vosk 离线识别。"));
 #else
     QMessageBox::information(this, QStringLiteral("语音输入"),
                              QStringLiteral("当前平台暂未支持语音识别。Windows 使用 System.Speech，Linux 使用 Vosk。"));
@@ -353,7 +353,8 @@ void MainWindow::voiceInputFinished(int exitCode, QProcess::ExitStatus exitStatu
                                  QStringLiteral("无法使用 Linux 录音设备。请安装 alsa-utils，并检查麦克风权限。%1").arg(error));
             return;
         }
-        m_voiceProcess->start(QStringLiteral("python3"), {linuxVoiceScriptPath(), m_linuxVoiceAudioFile});
+        QMetaObject::invokeMethod(m_voskTranscriber, "transcribe", Qt::QueuedConnection,
+                                  Q_ARG(QString, m_linuxVoiceAudioFile));
         return;
     }
     const QString output = QString::fromUtf8(m_voiceProcess->readAllStandardOutput()).trimmed();
@@ -377,19 +378,19 @@ void MainWindow::voiceProcessError(QProcess::ProcessError error)
                              QStringLiteral("找不到 arecord。请安装 alsa-utils：sudo apt install alsa-utils"));
         return;
     }
-    QMessageBox::warning(this, QStringLiteral("Vosk 不可用"),
-                         QStringLiteral("找不到 python3。请安装 Python 3，并执行 python3 -m pip install vosk。"));
+    QMessageBox::warning(this, QStringLiteral("语音识别不可用"),
+                         QStringLiteral("无法启动 Linux 录音工具。请安装 alsa-utils。"));
 #else
     QMessageBox::warning(this, QStringLiteral("语音识别不可用"),
                          QStringLiteral("无法启动系统语音识别服务。"));
 #endif
 }
 
-QString MainWindow::linuxVoiceScriptPath() const
+void MainWindow::voskTranscriptionFinished(const QString &text, const QString &errorMessage)
 {
-    const QString fileName = QStringLiteral("linux_voice.py");
-    const QString besideProgram = QDir(QCoreApplication::applicationDirPath()).filePath(fileName);
-    if (QFileInfo::exists(besideProgram)) return besideProgram;
-    const QString workingDirectory = QDir::current().filePath(fileName);
-    return QFileInfo::exists(workingDirectory) ? workingDirectory : QString();
+    if (!errorMessage.isEmpty()) {
+        QMessageBox::warning(this, QStringLiteral("Vosk 识别失败"), errorMessage);
+        return;
+    }
+    if (m_taskNameEdit) m_taskNameEdit->setText(text);
 }

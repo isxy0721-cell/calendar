@@ -4,6 +4,7 @@
 #include "reminderworker.h"
 #include "taskmanager.h"
 #include "usermanager.h"
+#include "vosktranscriber.h"
 #include <QMainWindow>
 #include <QProcess>
 #include <QThread>
@@ -37,6 +38,7 @@ private slots:
     void startVoiceInput();
     void voiceInputFinished(int exitCode, QProcess::ExitStatus exitStatus);
     void voiceProcessError(QProcess::ProcessError error);
+    void voskTranscriptionFinished(const QString &text, const QString &errorMessage);
 
 private:
     void buildLoginPage();
@@ -44,7 +46,6 @@ private:
     void updateWorkerTasks();
     Priority selectedPriority() const;
     Category selectedCategory() const;
-    QString linuxVoiceScriptPath() const;
 
     UserManager m_userManager;
     TaskManager m_taskManager;
@@ -68,6 +69,8 @@ private:
     bool m_linuxRecording = false;
     QThread m_reminderThread;
     ReminderWorker *m_reminderWorker = nullptr;
+    QThread m_voskThread;
+    VoskTranscriber *m_voskTranscriber = nullptr;
 };
 
 #endif

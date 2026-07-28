@@ -8,6 +8,7 @@ SOURCES += \
     cli.cpp \
     mainwindow.cpp \
     reminderworker.cpp \
+    vosktranscriber.cpp \
     task.cpp \
     taskmanager.cpp \
     usermanager.cpp
@@ -16,10 +17,7 @@ HEADERS += \
     cli.h \
     mainwindow.h \
     reminderworker.h \
+    vosktranscriber.h \
     task.h \
     taskmanager.h \
     usermanager.h
-
-unix:!macx {
-    QMAKE_POST_LINK += cp -f $$PWD/linux_voice.py $$OUT_PWD/linux_voice.py
-}
