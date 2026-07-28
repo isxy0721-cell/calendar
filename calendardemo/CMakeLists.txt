@@ -19,6 +19,9 @@ set(PROJECT_SOURCES
     mainwindow.h mainwindow.cpp
 )
 
+# Linux 离线语音识别的 Python 帮助脚本需要和可执行文件放在同一目录。
+configure_file(linux_voice.py linux_voice.py COPYONLY)
+
 if(QT_VERSION_MAJOR GREATER_EQUAL 6)
     qt_add_executable(calendardemo MANUAL_FINALIZATION ${PROJECT_SOURCES})
 else()

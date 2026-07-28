@@ -33,7 +33,8 @@ bool TaskManager::save() const
 }
 
 bool TaskManager::addTask(const QString &name, const QDateTime &start, Priority priority,
-                          Category category, const QDateTime &remind, QString *errorMessage)
+                          Category category, const QDateTime &remind, QString *errorMessage,
+                          const QString &note)
 {
     if (name.trimmed().isEmpty() || !start.isValid() || !remind.isValid()) {
         if (errorMessage) *errorMessage = QStringLiteral("请填写有效的任务名称、开始时间和提醒时间。");
@@ -49,7 +50,7 @@ bool TaskManager::addTask(const QString &name, const QDateTime &start, Priority 
             return false;
         }
     }
-    m_tasks.append(Task(QUuid::createUuid().toString(QUuid::WithoutBraces), name, start, priority, category, remind));
+    m_tasks.append(Task(QUuid::createUuid().toString(QUuid::WithoutBraces), name, start, priority, category, remind, note));
     if (!save()) {
         m_tasks.removeLast();
         if (errorMessage) *errorMessage = QStringLiteral("保存任务文件失败。");

@@ -16,7 +16,7 @@ public:
     Task();
     Task(const QString &id, const QString &name, const QDateTime &startTime,
          Priority priority = Priority::Medium, Category category = Category::Life,
-         const QDateTime &remindTime = QDateTime());
+         const QDateTime &remindTime = QDateTime(), const QString &note = QString());
 
     QJsonObject toJson() const;
     static Task fromJson(const QJsonObject &object);
@@ -27,6 +27,7 @@ public:
     Priority priority() const;
     Category category() const;
     QDateTime remindTime() const;
+    QString note() const;
     QString priorityText() const;
     QString categoryText() const;
 
@@ -37,6 +38,7 @@ private:
     Priority m_priority = Priority::Medium;
     Category m_category = Category::Life;
     QDateTime m_remindTime;
+    QString m_note;
 };
 
 Q_DECLARE_METATYPE(Task)

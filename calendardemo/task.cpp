@@ -3,9 +3,9 @@
 Task::Task() = default;
 
 Task::Task(const QString &id, const QString &name, const QDateTime &startTime,
-           Priority priority, Category category, const QDateTime &remindTime)
+           Priority priority, Category category, const QDateTime &remindTime, const QString &note)
     : m_id(id), m_name(name.trimmed()), m_startTime(startTime), m_priority(priority),
-      m_category(category), m_remindTime(remindTime)
+      m_category(category), m_remindTime(remindTime), m_note(note.trimmed())
 {
     if (!m_remindTime.isValid())
         m_remindTime = startTime.addSecs(-5 * 60);
@@ -17,7 +17,7 @@ QJsonObject Task::toJson() const
             {"startTime", m_startTime.toString(Qt::ISODate)},
             {"priority", static_cast<int>(m_priority)},
             {"category", static_cast<int>(m_category)},
-            {"remindTime", m_remindTime.toString(Qt::ISODate)}};
+            {"remindTime", m_remindTime.toString(Qt::ISODate)}, {"note", m_note}};
 }
 
 Task Task::fromJson(const QJsonObject &object)
@@ -26,7 +26,8 @@ Task Task::fromJson(const QJsonObject &object)
                 QDateTime::fromString(object.value("startTime").toString(), Qt::ISODate),
                 static_cast<Priority>(object.value("priority").toInt(static_cast<int>(Priority::Medium))),
                 static_cast<Category>(object.value("category").toInt(static_cast<int>(Category::Life))),
-                QDateTime::fromString(object.value("remindTime").toString(), Qt::ISODate));
+                QDateTime::fromString(object.value("remindTime").toString(), Qt::ISODate),
+                object.value("note").toString());
 }
 
 QString Task::id() const { return m_id; }
@@ -35,6 +36,7 @@ QDateTime Task::startTime() const { return m_startTime; }
 Priority Task::priority() const { return m_priority; }
 Category Task::category() const { return m_category; }
 QDateTime Task::remindTime() const { return m_remindTime; }
+QString Task::note() const { return m_note; }
 
 QString Task::priorityText() const
 {

@@ -16,6 +16,7 @@ class QComboBox;
 class QTableWidget;
 class QPushButton;
 class QMediaPlayer;
+class QPlainTextEdit;
 
 class MainWindow : public QMainWindow
 {
@@ -28,12 +29,14 @@ private slots:
     void login();
     void registerUser();
     void addTask();
+    void showAddTaskDialog();
     void deleteTask();
     void refreshTable();
     void showReminder(const Task &task);
     void chooseReminderSound();
     void startVoiceInput();
     void voiceInputFinished(int exitCode, QProcess::ExitStatus exitStatus);
+    void voiceProcessError(QProcess::ProcessError error);
 
 private:
     void buildLoginPage();
@@ -41,6 +44,7 @@ private:
     void updateWorkerTasks();
     Priority selectedPriority() const;
     Category selectedCategory() const;
+    QString linuxVoiceScriptPath() const;
 
     UserManager m_userManager;
     TaskManager m_taskManager;
@@ -48,6 +52,7 @@ private:
     QLineEdit *m_userEdit = nullptr;
     QLineEdit *m_passwordEdit = nullptr;
     QLineEdit *m_taskNameEdit = nullptr;
+    QPlainTextEdit *m_noteEdit = nullptr;
     QDateTimeEdit *m_startEdit = nullptr;
     QDateTimeEdit *m_remindEdit = nullptr;
     QDateEdit *m_filterDateEdit = nullptr;
@@ -59,6 +64,8 @@ private:
     QAudioOutput *m_audioOutput = nullptr;
     QProcess *m_voiceProcess = nullptr;
     QString m_reminderSoundPath;
+    QString m_linuxVoiceAudioFile;
+    bool m_linuxRecording = false;
     QThread m_reminderThread;
     ReminderWorker *m_reminderWorker = nullptr;
 };

@@ -19,3 +19,7 @@ HEADERS += \
     task.h \
     taskmanager.h \
     usermanager.h
+
+unix:!macx {
+    QMAKE_POST_LINK += cp -f $$PWD/linux_voice.py $$OUT_PWD/linux_voice.py
+}
