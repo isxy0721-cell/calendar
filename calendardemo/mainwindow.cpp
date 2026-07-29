@@ -442,7 +442,7 @@ void MainWindow::voiceInputFinished(int exitCode, QProcess::ExitStatus exitStatu
     }
     const int resultAt = output.indexOf(QStringLiteral("RESULT:"));
     if (exitStatus == QProcess::NormalExit && exitCode == 0 && resultAt >= 0) {
-        m_taskNameEdit->setText(normalizeVoiceText(output.mid(resultAt + 7)));
+        m_taskNameEdit->setText(m_taskNameEdit->text() + normalizeVoiceText(output.mid(resultAt + 7)));
         setVoiceListening(false);
         return;
     }
@@ -477,7 +477,7 @@ void MainWindow::voskTranscriptionFinished(const QString &text, const QString &e
         QMessageBox::warning(this, QStringLiteral("Vosk 识别失败"), errorMessage);
         return;
     }
-    if (m_taskNameEdit) m_taskNameEdit->setText(normalizeVoiceText(text));
+    if (m_taskNameEdit) m_taskNameEdit->setText(m_taskNameEdit->text() + normalizeVoiceText(text));
 }
 
 void MainWindow::setVoiceListening(bool listening)
