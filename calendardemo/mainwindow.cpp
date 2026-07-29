@@ -19,6 +19,7 @@
 #include <QPlainTextEdit>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QStatusBar>
 #include <QUrl>
 #include <QPushButton>
 #include <QTableWidget>
@@ -45,6 +46,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     buildLoginPage();
     m_reminderSoundPath = QSettings().value(QStringLiteral("reminder/soundPath")).toString();
     m_player = new QMediaPlayer(this);
+    connect(m_player, QOverload<QMediaPlayer::Error>::of(&QMediaPlayer::error),
+            this, &MainWindow::handleAudioError);
     m_voiceProcess = new QProcess(this);
     connect(m_voiceProcess, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
             this, &MainWindow::voiceInputFinished);
@@ -326,6 +329,13 @@ void MainWindow::showReminder(const Task &task)
     }
     QMessageBox::information(this, QStringLiteral("任务提醒"),
                              QStringLiteral("提醒：%1\n开始时间：%2").arg(task.name(), task.startTime().toString("yyyy-MM-dd HH:mm")));
+}
+
+void MainWindow::handleAudioError(QMediaPlayer::Error error)
+{
+    if (error == QMediaPlayer::NoError) return;
+    statusBar()->showMessage(QStringLiteral("提醒音频播放失败：%1；已改用系统提示音。").arg(m_player->errorString()), 8000);
+    QApplication::beep();
 }
 
 void MainWindow::chooseReminderSound()
