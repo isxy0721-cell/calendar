@@ -25,10 +25,15 @@ if ! APP="$(realpath "$APP")" || [[ ! -x "$APP" ]]; then
     exit 2
 fi
 
-WORK_DIR="$(mktemp -d -t myschedule-stress.XXXXXX)"
-if [[ "$KEEP_DATA" != true ]]; then
+START_DIR="$(pwd)"
+if [[ "$KEEP_DATA" == true ]]; then
+    WORK_DIR="$START_DIR/stress-test-data-$(date +%Y%m%d-%H%M%S)"
+    mkdir -p "$WORK_DIR"
+else
+    WORK_DIR="$(mktemp -d -t myschedule-stress.XXXXXX)"
     trap 'rm -rf "$WORK_DIR"' EXIT
 fi
+echo "测试工作目录：$WORK_DIR"
 cd "$WORK_DIR"
 
 USER_NAME="stress_user"
@@ -77,5 +82,5 @@ fi
 
 echo "测试通过：已完成注册、$COUNT 条新增、查询、更新和删除。"
 if [[ "$KEEP_DATA" == true ]]; then
-    echo "测试数据保留在：$WORK_DIR"
+    echo "测试数据已保留在：$WORK_DIR"
 fi
