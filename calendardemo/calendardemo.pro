@@ -21,3 +21,5 @@ HEADERS += \
     task.h \
     taskmanager.h \
     usermanager.h
+
+RESOURCES += resources.qrc

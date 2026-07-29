@@ -7,7 +7,7 @@
 #include <QDateEdit>
 #include <QDateTimeEdit>
 #include <QDir>
-#include <QFileDialog>
+#include <QFile>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -17,7 +17,7 @@
 #include <QMediaPlayer>
 #include <QProcess>
 #include <QPlainTextEdit>
-#include <QSettings>
+#include <QSaveFile>
 #include <QStandardPaths>
 #include <QStatusBar>
 #include <QUrl>
@@ -44,7 +44,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     setMinimumSize(900, 560);
     setWindowTitle(QStringLiteral("我的日程管理"));
     buildLoginPage();
-    m_reminderSoundPath = QSettings().value(QStringLiteral("reminder/soundPath")).toString();
+    m_reminderSoundPath = defaultReminderSoundPath();
     m_player = new QMediaPlayer(this);
     connect(m_player, QOverload<QMediaPlayer::Error>::of(&QMediaPlayer::error),
             this, &MainWindow::handleAudioError);
@@ -126,14 +126,12 @@ void MainWindow::buildSchedulePage()
     m_searchEdit->setVisible(false);
     auto *searchButton = new QPushButton(QStringLiteral("⌕"));
     searchButton->setToolTip(QStringLiteral("搜索当天任务"));
-    searchButton->setFixedSize(36, 36);
-    searchButton->setStyleSheet(QStringLiteral("QPushButton { font-size: 22px; border: 1px solid #d1d5db; border-radius: 18px; } QPushButton:hover { background: #eff6ff; border-color: #60a5fa; }"));
-    auto *soundButton = new QPushButton(QStringLiteral("提醒铃声"));
+    searchButton->setFixedSize(46, 46);
+    searchButton->setStyleSheet(QStringLiteral("QPushButton { font-size: 28px; border: 1px solid #d1d5db; border-radius: 23px; } QPushButton:hover { background: #eff6ff; border-color: #60a5fa; }"));
     auto *addButton = new QPushButton(QStringLiteral("＋ 添加任务"));
     addButton->setStyleSheet(QStringLiteral("QPushButton { background:#2563eb; color:white; border:0; border-radius:18px; padding:9px 18px; font-weight:600; } QPushButton:hover { background:#1d4ed8; }"));
     header->addWidget(m_searchEdit);
     header->addWidget(searchButton);
-    header->addWidget(soundButton);
     header->addWidget(addButton);
     layout->addLayout(header);
     layout->addSpacing(18);
@@ -166,7 +164,6 @@ void MainWindow::buildSchedulePage()
     layout->addWidget(m_taskTable);
     connect(addButton, &QPushButton::clicked, this, &MainWindow::showAddTaskDialog);
     connect(searchButton, &QPushButton::clicked, this, &MainWindow::toggleTaskSearch);
-    connect(soundButton, &QPushButton::clicked, this, &MainWindow::chooseReminderSound);
     connect(m_deleteButton, &QPushButton::clicked, this, &MainWindow::deleteTask);
     connect(m_filterDateEdit, &QDateEdit::dateChanged, this, &MainWindow::refreshTable);
     connect(m_searchEdit, &QLineEdit::textChanged, this, &MainWindow::refreshTable);
@@ -324,6 +321,8 @@ void MainWindow::showReminder(const Task &task)
     if (m_reminderSoundPath.isEmpty()) {
         QApplication::beep();
     } else {
+        // 新提醒到来时从头播放，避免上一段提示音叠加或占用播放器状态。
+        m_player->stop();
         m_player->setMedia(QUrl::fromLocalFile(m_reminderSoundPath));
         m_player->play();
     }
@@ -338,15 +337,19 @@ void MainWindow::handleAudioError(QMediaPlayer::Error error)
     QApplication::beep();
 }
 
-void MainWindow::chooseReminderSound()
+QString MainWindow::defaultReminderSoundPath() const
 {
-    const QString file = QFileDialog::getOpenFileName(
-        this, QStringLiteral("选择提醒音频"), m_reminderSoundPath,
-        QStringLiteral("音频文件 (*.wav *.mp3 *.ogg *.m4a);;所有文件 (*.*)"));
-    if (file.isEmpty()) return;
-    m_reminderSoundPath = file;
-    QSettings().setValue(QStringLiteral("reminder/soundPath"), file);
-    QMessageBox::information(this, QStringLiteral("设置成功"), QStringLiteral("提醒铃声已保存。"));
+    const QString dataDirectory = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (dataDirectory.isEmpty() || !QDir().mkpath(dataDirectory)) return {};
+    const QString destination = QDir(dataDirectory).filePath(QStringLiteral("default-reminder.wav"));
+    QFile source(QStringLiteral(":/sounds/default-reminder.wav"));
+    if (!source.open(QIODevice::ReadOnly)) return {};
+    const bool needsCopy = !QFile::exists(destination) || QFile(destination).size() != source.size();
+    if (!needsCopy) return destination;
+    QSaveFile target(destination);
+    if (!target.open(QIODevice::WriteOnly)) return {};
+    target.write(source.readAll());
+    return target.commit() ? destination : QString();
 }
 
 void MainWindow::startVoiceInput()

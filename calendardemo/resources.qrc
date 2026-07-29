@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/sounds">
+        <file alias="default-reminder.wav">assets/default-reminder.wav</file>
+    </qresource>
+</RCC>

@@ -35,7 +35,6 @@ private slots:
     void refreshTable();
     void showReminder(const Task &task);
     void handleAudioError(QMediaPlayer::Error error);
-    void chooseReminderSound();
     void startVoiceInput();
     void voiceInputFinished(int exitCode, QProcess::ExitStatus exitStatus);
     void voiceProcessError(QProcess::ProcessError error);
@@ -47,6 +46,7 @@ private:
     void updateWorkerTasks();
     Priority selectedPriority() const;
     Category selectedCategory() const;
+    QString defaultReminderSoundPath() const;
 
     UserManager m_userManager;
     TaskManager m_taskManager;
