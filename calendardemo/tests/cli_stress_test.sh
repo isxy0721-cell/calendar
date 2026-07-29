@@ -34,6 +34,7 @@ cd "$WORK_DIR"
 USER_NAME="stress_user"
 PASSWORD="stress_password"
 BASE_TIME="2030-01-01 08:00"
+BASE_EPOCH="$(date -d "$BASE_TIME" +%s)"
 
 echo "[1/5] 注册临时账户并准备 $COUNT 条任务"
 "$APP" register "$USER_NAME" "$PASSWORD" >/dev/null
@@ -41,8 +42,10 @@ echo "[1/5] 注册临时账户并准备 $COUNT 条任务"
 echo "[2/5] 批量新增任务（每 100 条显示一次进度）"
 task_index=0
 while [ "$task_index" -lt "$COUNT" ]; do
-    start="$(date -d "$BASE_TIME + $task_index minutes" '+%Y-%m-%dT%H:%M')"
-    remind="$(date -d "$BASE_TIME + $task_index minutes - 5 minutes" '+%Y-%m-%dT%H:%M')"
+    start_epoch=$((BASE_EPOCH + task_index * 60))
+    remind_epoch=$((start_epoch - 5 * 60))
+    start="$(date -d "@$start_epoch" '+%Y-%m-%dT%H:%M')"
+    remind="$(date -d "@$remind_epoch" '+%Y-%m-%dT%H:%M')"
     "$APP" "$USER_NAME" "$PASSWORD" addtask "stress-task-$(printf '%04d' "$task_index")" \
         "$start" medium study "$remind" >/dev/null
     if [ $(((task_index + 1) % 100)) -eq 0 ] || [ $((task_index + 1)) -eq "$COUNT" ]; then
