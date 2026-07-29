@@ -72,6 +72,36 @@ bool TaskManager::deleteTask(const QString &id)
     return false;
 }
 
+bool TaskManager::updateTask(const QString &id, const QString &name, const QDateTime &start,
+                             Priority priority, Category category, const QDateTime &remind,
+                             QString *errorMessage)
+{
+    if (name.trimmed().isEmpty() || !start.isValid() || !remind.isValid()) {
+        if (errorMessage) *errorMessage = QStringLiteral("请填写有效的任务名称、开始时间和提醒时间。");
+        return false;
+    }
+    int index = -1;
+    for (int i = 0; i < m_tasks.size(); ++i) {
+        if (m_tasks.at(i).id() == id) { index = i; break; }
+    }
+    if (index < 0) {
+        if (errorMessage) *errorMessage = QStringLiteral("未找到指定任务 ID。");
+        return false;
+    }
+    for (int i = 0; i < m_tasks.size(); ++i) {
+        if (i != index && m_tasks.at(i).startTime() == start) {
+            if (errorMessage) *errorMessage = QStringLiteral("已有任务使用该开始时间，开始时间必须唯一。");
+            return false;
+        }
+    }
+    const Task original = m_tasks.at(index);
+    m_tasks[index] = Task(id, name, start, priority, category, remind, original.note());
+    if (save()) return true;
+    m_tasks[index] = original;
+    if (errorMessage) *errorMessage = QStringLiteral("保存任务文件失败。");
+    return false;
+}
+
 QList<Task> TaskManager::tasksForDate(const QDate &date) const
 {
     QList<Task> result;

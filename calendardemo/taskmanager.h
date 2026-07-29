@@ -11,6 +11,9 @@ public:
     bool addTask(const QString &name, const QDateTime &start, Priority priority,
                  Category category, const QDateTime &remind, QString *errorMessage,
                  const QString &note = QString());
+    bool updateTask(const QString &id, const QString &name, const QDateTime &start,
+                    Priority priority, Category category, const QDateTime &remind,
+                    QString *errorMessage);
     bool deleteTask(const QString &id);
     QList<Task> tasksForDate(const QDate &date) const;
     QList<Task> allTasks() const;
