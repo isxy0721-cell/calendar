@@ -8,6 +8,7 @@
 #include <QDateTimeEdit>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -125,10 +126,9 @@ void MainWindow::buildSchedulePage()
     m_searchEdit->setClearButtonEnabled(true);
     m_searchEdit->setFixedWidth(190);
     m_searchEdit->setVisible(false);
-    auto *searchButton = new QPushButton(QStringLiteral("⌕"));
+    auto *searchButton = new QPushButton(QStringLiteral("🔍 搜索"));
     searchButton->setToolTip(QStringLiteral("搜索当天任务"));
-    searchButton->setFixedSize(46, 46);
-    searchButton->setStyleSheet(QStringLiteral("QPushButton { font-size: 28px; border: 1px solid #d1d5db; border-radius: 23px; } QPushButton:hover { background: #eff6ff; border-color: #60a5fa; }"));
+    searchButton->setStyleSheet(QStringLiteral("QPushButton { background:#2563eb; color:white; border:0; border-radius:18px; padding:9px 18px; font-weight:600; } QPushButton:hover { background:#1d4ed8; }"));
     auto *addButton = new QPushButton(QStringLiteral("＋ 添加任务"));
     addButton->setStyleSheet(QStringLiteral("QPushButton { background:#2563eb; color:white; border:0; border-radius:18px; padding:9px 18px; font-weight:600; } QPushButton:hover { background:#1d4ed8; }"));
     header->addWidget(m_searchEdit);
@@ -257,13 +257,22 @@ void MainWindow::showAddTaskDialog()
     form->addRow(QStringLiteral("分类："), m_categoryBox);
     form->addRow(QStringLiteral("备注："), m_noteEdit);
     layout->addLayout(form);
-    auto *voiceButton = new QPushButton(QStringLiteral("语音识别任务名称"));
-    layout->addWidget(voiceButton);
+    auto *voiceLayout = new QHBoxLayout;
+    m_startVoiceButton = new QPushButton(QStringLiteral("开始语音输入"));
+    m_stopVoiceButton = new QPushButton(QStringLiteral("结束并识别"));
+    m_stopVoiceButton->setEnabled(false);
+    voiceLayout->addWidget(m_startVoiceButton);
+    voiceLayout->addWidget(m_stopVoiceButton);
+    layout->addLayout(voiceLayout);
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Cancel);
     auto *saveButton = buttons->addButton(QStringLiteral("保存任务"), QDialogButtonBox::AcceptRole);
     layout->addWidget(buttons);
-    connect(voiceButton, &QPushButton::clicked, this, &MainWindow::startVoiceInput);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    connect(m_startVoiceButton, &QPushButton::clicked, this, &MainWindow::startVoiceInput);
+    connect(m_stopVoiceButton, &QPushButton::clicked, this, &MainWindow::stopVoiceInput);
+    connect(buttons, &QDialogButtonBox::rejected, this, [this, &dialog] {
+        if (m_voiceListening) stopVoiceInput();
+        dialog.reject();
+    });
     connect(saveButton, &QPushButton::clicked, this, [this, &dialog] {
         const int beforeCount = m_taskManager.allTasks().size();
         addTask();
@@ -276,6 +285,8 @@ void MainWindow::showAddTaskDialog()
     m_remindEdit = nullptr;
     m_priorityBox = nullptr;
     m_categoryBox = nullptr;
+    m_startVoiceButton = nullptr;
+    m_stopVoiceButton = nullptr;
 }
 
 void MainWindow::deleteTask()
@@ -354,59 +365,88 @@ QString MainWindow::defaultReminderSoundPath() const
 
 void MainWindow::startVoiceInput()
 {
-#ifdef Q_OS_WIN
     if (m_voiceProcess->state() != QProcess::NotRunning) return;
+#ifdef Q_OS_WIN
     const QString script = QStringLiteral(
         "$ErrorActionPreference='Stop'; "
         "Add-Type -AssemblyName System.Speech; "
         "$r=New-Object System.Speech.Recognition.SpeechRecognitionEngine; "
         "$r.LoadGrammar((New-Object System.Speech.Recognition.DictationGrammar)); "
         "[Console]::OutputEncoding=New-Object System.Text.UTF8Encoding; "
-        "$x=$r.Recognize([TimeSpan]::FromSeconds(8)); "
-        "if($x){Write-Output ('RESULT:'+$x.Text)}");
+        "$global:recognized=''; "
+        "$r.add_SpeechRecognized({param($s,$e) $global:recognized=$e.Result.Text}); "
+        "$r.RecognizeAsync([System.Speech.Recognition.RecognizeMode]::Multiple); "
+        "[Console]::In.ReadLine() | Out-Null; "
+        "$r.RecognizeAsyncCancel(); Start-Sleep -Milliseconds 200; "
+        "if($global:recognized){Write-Output ('RESULT:'+$global:recognized)}; $r.Dispose()");
     m_voiceProcess->start(QStringLiteral("powershell.exe"),
                           {QStringLiteral("-NoProfile"), QStringLiteral("-ExecutionPolicy"), QStringLiteral("Bypass"),
                            QStringLiteral("-Command"), script});
-    QMessageBox::information(this, QStringLiteral("语音输入"),
-                             QStringLiteral("请在 8 秒内说出任务名称。识别完成后会自动填入名称输入框。"));
 #elif defined(Q_OS_LINUX)
-    if (m_voiceProcess->state() != QProcess::NotRunning) return;
     m_linuxVoiceAudioFile = QDir(QStandardPaths::writableLocation(QStandardPaths::TempLocation))
                                .filePath(QStringLiteral("myschedule-voice.wav"));
     m_linuxRecording = true;
+    m_linuxStopRequested = false;
     m_voiceProcess->start(QStringLiteral("arecord"),
                           {QStringLiteral("-q"), QStringLiteral("-f"), QStringLiteral("S16_LE"),
                            QStringLiteral("-r"), QStringLiteral("16000"), QStringLiteral("-c"), QStringLiteral("1"),
-                           QStringLiteral("-d"), QStringLiteral("8"), m_linuxVoiceAudioFile});
-    QMessageBox::information(this, QStringLiteral("语音输入"),
-                             QStringLiteral("请在 8 秒内说出任务名称。正在使用 C++ Vosk 离线识别。"));
+                           m_linuxVoiceAudioFile});
 #else
     QMessageBox::information(this, QStringLiteral("语音输入"),
                              QStringLiteral("当前平台暂未支持语音识别。Windows 使用 System.Speech，Linux 使用 Vosk。"));
+    return;
 #endif
+    setVoiceListening(true);
+    statusBar()->showMessage(QStringLiteral("正在监听语音；完成后请点击“结束并识别”。"));
+}
+
+void MainWindow::stopVoiceInput()
+{
+    if (!m_voiceListening) return;
+#ifdef Q_OS_WIN
+    // Windows 脚本等待标准输入；写入换行会停止异步识别并返回最后一句识别结果。
+    m_voiceProcess->write("\n");
+    m_voiceProcess->closeWriteChannel();
+#elif defined(Q_OS_LINUX)
+    if (m_linuxRecording) {
+        m_linuxStopRequested = true;
+        m_voiceProcess->terminate();
+    }
+#endif
+    statusBar()->showMessage(QStringLiteral("已停止录音，正在识别语音内容…"));
 }
 
 void MainWindow::voiceInputFinished(int exitCode, QProcess::ExitStatus exitStatus)
 {
     if (m_linuxRecording) {
         m_linuxRecording = false;
-        if (exitStatus != QProcess::NormalExit || exitCode != 0) {
+        const bool usableRecording = QFileInfo(m_linuxVoiceAudioFile).size() > 44;
+        if ((!m_linuxStopRequested && (exitStatus != QProcess::NormalExit || exitCode != 0)) || !usableRecording) {
+            m_linuxStopRequested = false;
+            setVoiceListening(false);
             const QString error = QString::fromLocal8Bit(m_voiceProcess->readAllStandardError()).trimmed();
             QMessageBox::warning(this, QStringLiteral("录音失败"),
                                  QStringLiteral("无法使用 Linux 录音设备。请安装 alsa-utils，并检查麦克风权限。%1").arg(error));
             return;
         }
+        m_linuxStopRequested = false;
         QMetaObject::invokeMethod(m_voskTranscriber, "transcribe", Qt::QueuedConnection,
                                   Q_ARG(QString, m_linuxVoiceAudioFile));
         return;
     }
     const QString output = QString::fromUtf8(m_voiceProcess->readAllStandardOutput()).trimmed();
     const QString error = QString::fromLocal8Bit(m_voiceProcess->readAllStandardError()).trimmed();
-    const int resultAt = output.indexOf(QStringLiteral("RESULT:"));
-    if (exitStatus == QProcess::NormalExit && exitCode == 0 && resultAt >= 0 && m_taskNameEdit) {
-        m_taskNameEdit->setText(normalizeVoiceText(output.mid(resultAt + 7)));
+    if (!m_taskNameEdit) {
+        setVoiceListening(false);
         return;
     }
+    const int resultAt = output.indexOf(QStringLiteral("RESULT:"));
+    if (exitStatus == QProcess::NormalExit && exitCode == 0 && resultAt >= 0) {
+        m_taskNameEdit->setText(normalizeVoiceText(output.mid(resultAt + 7)));
+        setVoiceListening(false);
+        return;
+    }
+    setVoiceListening(false);
     QMessageBox::warning(this, QStringLiteral("语音识别失败"),
                          QStringLiteral("未识别到语音，或系统未安装可用的语音识别语言。%1").arg(error));
 }
@@ -414,6 +454,7 @@ void MainWindow::voiceInputFinished(int exitCode, QProcess::ExitStatus exitStatu
 void MainWindow::voiceProcessError(QProcess::ProcessError error)
 {
     if (error != QProcess::FailedToStart) return;
+    setVoiceListening(false);
 #ifdef Q_OS_LINUX
     if (m_linuxRecording) {
         m_linuxRecording = false;
@@ -431,9 +472,17 @@ void MainWindow::voiceProcessError(QProcess::ProcessError error)
 
 void MainWindow::voskTranscriptionFinished(const QString &text, const QString &errorMessage)
 {
+    setVoiceListening(false);
     if (!errorMessage.isEmpty()) {
         QMessageBox::warning(this, QStringLiteral("Vosk 识别失败"), errorMessage);
         return;
     }
     if (m_taskNameEdit) m_taskNameEdit->setText(normalizeVoiceText(text));
+}
+
+void MainWindow::setVoiceListening(bool listening)
+{
+    m_voiceListening = listening;
+    if (m_startVoiceButton) m_startVoiceButton->setEnabled(!listening);
+    if (m_stopVoiceButton) m_stopVoiceButton->setEnabled(listening);
 }

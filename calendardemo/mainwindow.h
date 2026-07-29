@@ -36,6 +36,7 @@ private slots:
     void showReminder(const Task &task);
     void handleReminderSoundStatus();
     void startVoiceInput();
+    void stopVoiceInput();
     void voiceInputFinished(int exitCode, QProcess::ExitStatus exitStatus);
     void voiceProcessError(QProcess::ProcessError error);
     void voskTranscriptionFinished(const QString &text, const QString &errorMessage);
@@ -44,6 +45,7 @@ private:
     void buildLoginPage();
     void buildSchedulePage();
     void updateWorkerTasks();
+    void setVoiceListening(bool listening);
     Priority selectedPriority() const;
     Category selectedCategory() const;
     QString defaultReminderSoundPath() const;
@@ -63,11 +65,15 @@ private:
     QComboBox *m_categoryBox = nullptr;
     QTableWidget *m_taskTable = nullptr;
     QPushButton *m_deleteButton = nullptr;
+    QPushButton *m_startVoiceButton = nullptr;
+    QPushButton *m_stopVoiceButton = nullptr;
     QSoundEffect *m_reminderSound = nullptr;
     QProcess *m_voiceProcess = nullptr;
     QString m_reminderSoundPath;
     QString m_linuxVoiceAudioFile;
     bool m_linuxRecording = false;
+    bool m_linuxStopRequested = false;
+    bool m_voiceListening = false;
     QThread m_reminderThread;
     ReminderWorker *m_reminderWorker = nullptr;
     QThread m_voskThread;
