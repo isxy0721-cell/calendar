@@ -22,6 +22,6 @@ set(PROJECT_SOURCES
 )
 
 
-add_executable(calendardemo ${PROJECT_SOURCES})
+add_executable(myschedule ${PROJECT_SOURCES})
 
-target_link_libraries(calendardemo PRIVATE Qt5::Widgets Qt5::Multimedia)
+target_link_libraries(myschedule PRIVATE Qt5::Widgets Qt5::Multimedia)

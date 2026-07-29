@@ -23,7 +23,6 @@ void printHelp()
            "  myschedule register <用户名> <口令>\n"
            "  myschedule <用户名> <口令> addtask <任务名> <启动时间> [优先级] [分类] [提醒时间]\n"
            "  myschedule <用户名> <口令> updatetask <任务ID> <任务名> <启动时间> [优先级] [分类] [提醒时间]\n"
-           "  myschedule <用户名> <口令> updatetask <任务ID> <任务名> <启动时间> [优先级] [分类] [提醒时间]\n"
            "  myschedule <用户名> <口令> showtask [日期]\n"
            "  myschedule <用户名> <口令> deltask <任务ID>\n"
            "  myschedule run [用户名 口令]\n\n"
@@ -33,7 +32,6 @@ void printHelp()
            "  myschedule register user1 password\n"
            "  myschedule user1 password addtask \"学习 Qt\" 2026-07-27T19:30 high study 2026-07-27T19:25\n"
            "  myschedule user1 password updatetask <任务ID> \"复习 Qt\" 2026-07-27T20:00 medium study\n"
-           "  myschedule user1 password updatetask <任务ID> \"复习 Qt\" 2026-07-27T20:30 medium study\n"
            "  myschedule user1 password showtask 2026-07-27\n"
            "  myschedule run user1 password\n";
     out.flush();
@@ -140,29 +138,6 @@ bool executeLoggedInCommand(const QStringList &arguments, TaskManager &manager)
     if (arguments.isEmpty()) return true;
     const QString command = arguments.first().toLower();
     if (command == "addtask") return addTaskFromArguments(arguments.mid(1), manager);
-    if (command == "updatetask") {
-        if (arguments.size() < 3 || arguments.size() > 6) {
-            out << "参数错误：updatetask 需要 <任务ID> <任务名> <启动时间> [优先级] [分类] [提醒时间]。\n";
-            return false;
-        }
-        const QDateTime start = parseDateTime(arguments.at(2));
-        bool priorityOk = false;
-        bool categoryOk = false;
-        const Priority priority = parsePriority(arguments.value(3), &priorityOk);
-        const Category category = parseCategory(arguments.value(4), &categoryOk);
-        const QDateTime reminder = arguments.size() >= 6 ? parseDateTime(arguments.at(5)) : start.addSecs(-300);
-        if (!start.isValid() || !reminder.isValid() || !priorityOk || !categoryOk) {
-            out << "时间、优先级或分类格式无效。\n";
-            return false;
-        }
-        QString error;
-        if (!manager.updateTask(arguments.at(0), arguments.at(1), start, priority, category, reminder, &error)) {
-            out << "更新失败：" << error << '\n';
-            return false;
-        }
-        out << "任务已更新。\n";
-        return true;
-    }
     if (command == "updatetask") return updateTaskFromArguments(arguments.mid(1), manager);
     if (command == "showtask") {
         const QDate date = arguments.size() >= 2 ? QDate::fromString(arguments.at(1), Qt::ISODate) : QDate::currentDate();
