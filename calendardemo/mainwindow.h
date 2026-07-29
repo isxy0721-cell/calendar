@@ -6,7 +6,6 @@
 #include "usermanager.h"
 #include "vosktranscriber.h"
 #include <QMainWindow>
-#include <QMediaPlayer>
 #include <QProcess>
 #include <QThread>
 
@@ -17,6 +16,7 @@ class QComboBox;
 class QTableWidget;
 class QPushButton;
 class QPlainTextEdit;
+class QSoundEffect;
 
 class MainWindow : public QMainWindow
 {
@@ -34,7 +34,7 @@ private slots:
     void deleteTask();
     void refreshTable();
     void showReminder(const Task &task);
-    void handleAudioError(QMediaPlayer::Error error);
+    void handleReminderSoundStatus();
     void startVoiceInput();
     void voiceInputFinished(int exitCode, QProcess::ExitStatus exitStatus);
     void voiceProcessError(QProcess::ProcessError error);
@@ -63,7 +63,7 @@ private:
     QComboBox *m_categoryBox = nullptr;
     QTableWidget *m_taskTable = nullptr;
     QPushButton *m_deleteButton = nullptr;
-    QMediaPlayer *m_player = nullptr;
+    QSoundEffect *m_reminderSound = nullptr;
     QProcess *m_voiceProcess = nullptr;
     QString m_reminderSoundPath;
     QString m_linuxVoiceAudioFile;

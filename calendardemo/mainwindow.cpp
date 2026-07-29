@@ -14,12 +14,12 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
-#include <QMediaPlayer>
 #include <QProcess>
 #include <QPlainTextEdit>
 #include <QSaveFile>
 #include <QStandardPaths>
 #include <QStatusBar>
+#include <QSoundEffect>
 #include <QUrl>
 #include <QPushButton>
 #include <QTableWidget>
@@ -45,9 +45,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     setWindowTitle(QStringLiteral("我的日程管理"));
     buildLoginPage();
     m_reminderSoundPath = defaultReminderSoundPath();
-    m_player = new QMediaPlayer(this);
-    connect(m_player, QOverload<QMediaPlayer::Error>::of(&QMediaPlayer::error),
-            this, &MainWindow::handleAudioError);
+    m_reminderSound = new QSoundEffect(this);
+    if (!m_reminderSoundPath.isEmpty())
+        m_reminderSound->setSource(QUrl::fromLocalFile(m_reminderSoundPath));
+    connect(m_reminderSound, &QSoundEffect::statusChanged, this, &MainWindow::handleReminderSoundStatus);
     m_voiceProcess = new QProcess(this);
     connect(m_voiceProcess, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
             this, &MainWindow::voiceInputFinished);
@@ -321,19 +322,18 @@ void MainWindow::showReminder(const Task &task)
     if (m_reminderSoundPath.isEmpty()) {
         QApplication::beep();
     } else {
-        // 新提醒到来时从头播放，避免上一段提示音叠加或占用播放器状态。
-        m_player->stop();
-        m_player->setMedia(QUrl::fromLocalFile(m_reminderSoundPath));
-        m_player->play();
+        // 新提醒到来时从头播放，避免提示音叠加。
+        m_reminderSound->stop();
+        m_reminderSound->play();
     }
     QMessageBox::information(this, QStringLiteral("任务提醒"),
                              QStringLiteral("提醒：%1\n开始时间：%2").arg(task.name(), task.startTime().toString("yyyy-MM-dd HH:mm")));
 }
 
-void MainWindow::handleAudioError(QMediaPlayer::Error error)
+void MainWindow::handleReminderSoundStatus()
 {
-    if (error == QMediaPlayer::NoError) return;
-    statusBar()->showMessage(QStringLiteral("提醒音频播放失败：%1；已改用系统提示音。").arg(m_player->errorString()), 8000);
+    if (m_reminderSound->status() != QSoundEffect::Error) return;
+    statusBar()->showMessage(QStringLiteral("提醒音频加载失败；已改用系统提示音。"), 8000);
     QApplication::beep();
 }
 
