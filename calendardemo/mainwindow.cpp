@@ -15,9 +15,6 @@
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QMediaPlayer>
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-#include <QAudioOutput>
-#endif
 #include <QProcess>
 #include <QPlainTextEdit>
 #include <QSettings>
@@ -26,6 +23,18 @@
 #include <QPushButton>
 #include <QTableWidget>
 #include <QVBoxLayout>
+
+namespace {
+QString normalizeVoiceText(const QString &text)
+{
+    QString result;
+    result.reserve(text.size());
+    for (const QChar character : text) {
+        if (!character.isSpace()) result.append(character);
+    }
+    return result;
+}
+}
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 {
@@ -36,10 +45,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     buildLoginPage();
     m_reminderSoundPath = QSettings().value(QStringLiteral("reminder/soundPath")).toString();
     m_player = new QMediaPlayer(this);
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    m_audioOutput = new QAudioOutput(this);
-    m_player->setAudioOutput(m_audioOutput);
-#endif
     m_voiceProcess = new QProcess(this);
     connect(m_voiceProcess, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
             this, &MainWindow::voiceInputFinished);
@@ -111,9 +116,20 @@ void MainWindow::buildSchedulePage()
     titleLayout->addWidget(subtitle);
     header->addLayout(titleLayout);
     header->addStretch();
+    m_searchEdit = new QLineEdit;
+    m_searchEdit->setPlaceholderText(QStringLiteral("搜索当天任务名称"));
+    m_searchEdit->setClearButtonEnabled(true);
+    m_searchEdit->setFixedWidth(190);
+    m_searchEdit->setVisible(false);
+    auto *searchButton = new QPushButton(QStringLiteral("⌕"));
+    searchButton->setToolTip(QStringLiteral("搜索当天任务"));
+    searchButton->setFixedSize(36, 36);
+    searchButton->setStyleSheet(QStringLiteral("QPushButton { font-size: 22px; border: 1px solid #d1d5db; border-radius: 18px; } QPushButton:hover { background: #eff6ff; border-color: #60a5fa; }"));
     auto *soundButton = new QPushButton(QStringLiteral("提醒铃声"));
     auto *addButton = new QPushButton(QStringLiteral("＋ 添加任务"));
     addButton->setStyleSheet(QStringLiteral("QPushButton { background:#2563eb; color:white; border:0; border-radius:18px; padding:9px 18px; font-weight:600; } QPushButton:hover { background:#1d4ed8; }"));
+    header->addWidget(m_searchEdit);
+    header->addWidget(searchButton);
     header->addWidget(soundButton);
     header->addWidget(addButton);
     layout->addLayout(header);
@@ -146,12 +162,25 @@ void MainWindow::buildSchedulePage()
     m_taskTable->verticalHeader()->setVisible(false);
     layout->addWidget(m_taskTable);
     connect(addButton, &QPushButton::clicked, this, &MainWindow::showAddTaskDialog);
+    connect(searchButton, &QPushButton::clicked, this, &MainWindow::toggleTaskSearch);
     connect(soundButton, &QPushButton::clicked, this, &MainWindow::chooseReminderSound);
     connect(m_deleteButton, &QPushButton::clicked, this, &MainWindow::deleteTask);
     connect(m_filterDateEdit, &QDateEdit::dateChanged, this, &MainWindow::refreshTable);
+    connect(m_searchEdit, &QLineEdit::textChanged, this, &MainWindow::refreshTable);
     connect(todayButton, &QPushButton::clicked, this, [this] { m_filterDateEdit->setDate(QDate::currentDate()); });
     setCentralWidget(page);
     refreshTable();
+}
+
+void MainWindow::toggleTaskSearch()
+{
+    const bool showSearch = !m_searchEdit->isVisible();
+    m_searchEdit->setVisible(showSearch);
+    if (showSearch) {
+        m_searchEdit->setFocus();
+    } else {
+        m_searchEdit->clear();
+    }
 }
 
 void MainWindow::registerUser()
@@ -266,7 +295,12 @@ void MainWindow::deleteTask()
 
 void MainWindow::refreshTable()
 {
-    const QList<Task> tasks = m_taskManager.tasksForDate(m_filterDateEdit->date());
+    const QList<Task> allTasks = m_taskManager.tasksForDate(m_filterDateEdit->date());
+    QList<Task> tasks;
+    const QString keyword = m_searchEdit ? m_searchEdit->text().trimmed() : QString();
+    for (const Task &task : allTasks) {
+        if (keyword.isEmpty() || task.name().contains(keyword, Qt::CaseInsensitive)) tasks.append(task);
+    }
     m_taskTable->setRowCount(tasks.size());
     for (int row = 0; row < tasks.size(); ++row) {
         const Task &task = tasks.at(row);
@@ -287,11 +321,7 @@ void MainWindow::showReminder(const Task &task)
     if (m_reminderSoundPath.isEmpty()) {
         QApplication::beep();
     } else {
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-        m_player->setSource(QUrl::fromLocalFile(m_reminderSoundPath));
-#else
         m_player->setMedia(QUrl::fromLocalFile(m_reminderSoundPath));
-#endif
         m_player->play();
     }
     QMessageBox::information(this, QStringLiteral("任务提醒"),
@@ -361,7 +391,7 @@ void MainWindow::voiceInputFinished(int exitCode, QProcess::ExitStatus exitStatu
     const QString error = QString::fromLocal8Bit(m_voiceProcess->readAllStandardError()).trimmed();
     const int resultAt = output.indexOf(QStringLiteral("RESULT:"));
     if (exitStatus == QProcess::NormalExit && exitCode == 0 && resultAt >= 0 && m_taskNameEdit) {
-        m_taskNameEdit->setText(output.mid(resultAt + 7).trimmed());
+        m_taskNameEdit->setText(normalizeVoiceText(output.mid(resultAt + 7)));
         return;
     }
     QMessageBox::warning(this, QStringLiteral("语音识别失败"),
@@ -392,5 +422,5 @@ void MainWindow::voskTranscriptionFinished(const QString &text, const QString &e
         QMessageBox::warning(this, QStringLiteral("Vosk 识别失败"), errorMessage);
         return;
     }
-    if (m_taskNameEdit) m_taskNameEdit->setText(text);
+    if (m_taskNameEdit) m_taskNameEdit->setText(normalizeVoiceText(text));
 }

@@ -9,7 +9,6 @@
 #include <QProcess>
 #include <QThread>
 
-class QAudioOutput;
 class QDateEdit;
 class QDateTimeEdit;
 class QLineEdit;
@@ -31,6 +30,7 @@ private slots:
     void registerUser();
     void addTask();
     void showAddTaskDialog();
+    void toggleTaskSearch();
     void deleteTask();
     void refreshTable();
     void showReminder(const Task &task);
@@ -52,6 +52,7 @@ private:
     QString m_currentUser;
     QLineEdit *m_userEdit = nullptr;
     QLineEdit *m_passwordEdit = nullptr;
+    QLineEdit *m_searchEdit = nullptr;
     QLineEdit *m_taskNameEdit = nullptr;
     QPlainTextEdit *m_noteEdit = nullptr;
     QDateTimeEdit *m_startEdit = nullptr;
@@ -62,7 +63,6 @@ private:
     QTableWidget *m_taskTable = nullptr;
     QPushButton *m_deleteButton = nullptr;
     QMediaPlayer *m_player = nullptr;
-    QAudioOutput *m_audioOutput = nullptr;
     QProcess *m_voiceProcess = nullptr;
     QString m_reminderSoundPath;
     QString m_linuxVoiceAudioFile;
