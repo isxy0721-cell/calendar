@@ -57,12 +57,23 @@ case "$action" in
             echo "ERROR: invalid date: $task_date" >&2
             exit 1
         }
+        if ! login_check="$("$binary" "$username" "$password" showtask "$task_date" 2>&1)"; then
+            echo "ERROR: login check failed before adding tasks." >&2
+            echo "Run this script in the same working directory that contains the program's data/ folder." >&2
+            printf '%s\n' "$login_check" >&2
+            exit 1
+        fi
         echo "Adding 1000 tasks for $username on $task_date..."
+        echo "  Added 0/1000 tasks"
         for index in $(seq 0 999); do
             start_time="$(date -d "$task_date 00:00 + $index minutes" +%Y-%m-%dT%H:%M)"
             remind_time="$(date -d "$start_time - 5 minutes" +%Y-%m-%dT%H:%M)"
             task_name="bulk_task_$(printf '%04d' "$index")"
-            "$binary" "$username" "$password" addtask "$task_name" "$start_time" medium study "$remind_time" >/dev/null
+            if ! add_output="$("$binary" "$username" "$password" addtask "$task_name" "$start_time" medium study "$remind_time" 2>&1)"; then
+                echo "ERROR: add task failed at item $index ($task_name)." >&2
+                printf '%s\n' "$add_output" >&2
+                exit 1
+            fi
             if [[ $(((index + 1) % 50)) -eq 0 ]]; then
                 echo "  Added $((index + 1))/1000 tasks"
             fi
