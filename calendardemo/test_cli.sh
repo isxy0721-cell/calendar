@@ -44,6 +44,16 @@ if [[ ! -x "$binary" ]]; then
     exit 1
 fi
 
+# TaskManager saves data relative to the process working directory. By default,
+# use the executable directory, so build/myschedule uses build/data.
+data_dir="${MYSCHEDULE_DATA_DIR:-$(dirname "$binary")}"
+if [[ ! -d "$data_dir" ]]; then
+    echo "ERROR: data working directory does not exist: $data_dir" >&2
+    exit 1
+fi
+cd "$data_dir"
+echo "Using data directory: $(pwd)/data"
+
 case "$action" in
     register)
         [[ $# -eq 0 ]] || usage 1
