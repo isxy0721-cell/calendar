@@ -10,6 +10,8 @@
 #include <QTextStream>
 #include <QThread>
 
+#include <algorithm>
+
 namespace {
 
 QTextStream out(stdout);
@@ -25,6 +27,7 @@ void printHelp()
            "  myschedule <用户名> <口令> addtask <任务名> <启动时间> [优先级] [分类] [提醒时间]\n"
            "  myschedule <用户名> <口令> updatetask <任务ID> <任务名> <启动时间> [优先级] [分类] [提醒时间]\n"
            "  myschedule <用户名> <口令> showtask [日期]\n"
+           "  myschedule <用户名> <口令> searchtask <任务名称>\n"
            "  myschedule <用户名> <口令> deltask <任务ID>\n"
            "  myschedule run [用户名 口令]\n\n"
            "时间格式：yyyy-MM-ddTHH:mm，例如 2026-07-27T19:30。\n"
@@ -34,6 +37,7 @@ void printHelp()
            "  myschedule user1 password addtask \"学习 Qt\" 2026-07-27T19:30 high study 2026-07-27T19:25\n"
            "  myschedule user1 password updatetask <任务ID> \"复习 Qt\" 2026-07-27T20:00 medium study\n"
            "  myschedule user1 password showtask 2026-07-27\n"
+           "  myschedule user1 password searchtask \"Qt\"\n"
            "  myschedule run user1 password\n");
     out.flush();
 }
@@ -144,6 +148,27 @@ bool executeLoggedInCommand(const QStringList &arguments, TaskManager &manager)
         const QDate date = arguments.size() >= 2 ? QDate::fromString(arguments.at(1), Qt::ISODate) : QDate::currentDate();
         if (!date.isValid()) { out << QStringLiteral("日期格式无效，应为 yyyy-MM-dd。\n"); return false; }
         printTasks(manager.tasksForDate(date));
+        return true;
+    }
+    if (command == "searchtask") {
+        if (arguments.size() != 2 || arguments.at(1).trimmed().isEmpty()) {
+            out << QStringLiteral("用法：searchtask <任务名称>\n");
+            return false;
+        }
+        const QString keyword = arguments.at(1).trimmed();
+        QList<Task> matchedTasks;
+        for (const Task &task : manager.allTasks()) {
+            if (task.name().contains(keyword, Qt::CaseInsensitive)) matchedTasks.append(task);
+        }
+        if (matchedTasks.isEmpty()) {
+            out << QStringLiteral("未找到名称包含“") << keyword << QStringLiteral("”的任务。\n");
+            return true;
+        }
+        std::sort(matchedTasks.begin(), matchedTasks.end(), [](const Task &left, const Task &right) {
+            return left.startTime() < right.startTime();
+        });
+        out << QStringLiteral("找到 ") << matchedTasks.size() << QStringLiteral(" 条匹配任务：\n");
+        printTasks(matchedTasks);
         return true;
     }
     if (command == "deltask") {
