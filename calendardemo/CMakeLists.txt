@@ -25,3 +25,11 @@ set(PROJECT_SOURCES
 add_executable(myschedule ${PROJECT_SOURCES})
 
 target_link_libraries(myschedule PRIVATE Qt5::Widgets Qt5::Multimedia)
+
+# 源文件中含有中文界面和命令行提示。明确以 UTF-8 读取源代码，避免 Linux
+# 编译环境按单字节编码处理中文，最终在终端输出双重乱码。
+if (MSVC)
+    target_compile_options(myschedule PRIVATE /utf-8)
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(myschedule PRIVATE -finput-charset=UTF-8 -fexec-charset=UTF-8)
+endif()
