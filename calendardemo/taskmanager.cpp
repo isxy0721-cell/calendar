@@ -74,7 +74,7 @@ bool TaskManager::deleteTask(const QString &id)
 
 bool TaskManager::updateTask(const QString &id, const QString &name, const QDateTime &start,
                              Priority priority, Category category, const QDateTime &remind,
-                             QString *errorMessage)
+                             QString *errorMessage, const QString *note)
 {
     if (name.trimmed().isEmpty() || !start.isValid() || !remind.isValid()) {
         if (errorMessage) *errorMessage = QStringLiteral("请填写有效的任务名称、开始时间和提醒时间。");
@@ -95,7 +95,8 @@ bool TaskManager::updateTask(const QString &id, const QString &name, const QDate
         }
     }
     const Task original = m_tasks.at(index);
-    m_tasks[index] = Task(id, name, start, priority, category, remind, original.note());
+    m_tasks[index] = Task(id, name, start, priority, category, remind,
+                          note ? *note : original.note());
     if (save()) return true;
     m_tasks[index] = original;
     if (errorMessage) *errorMessage = QStringLiteral("保存任务文件失败。");

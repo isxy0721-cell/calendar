@@ -30,6 +30,7 @@ private slots:
     void registerUser();
     void addTask();
     void showAddTaskDialog();
+    void showEditTaskDialog();
     void toggleTaskSearch();
     void deleteTask();
     void refreshTable();
@@ -65,6 +66,7 @@ private:
     QComboBox *m_categoryBox = nullptr;
     QTableWidget *m_taskTable = nullptr;
     QPushButton *m_deleteButton = nullptr;
+    QPushButton *m_editButton = nullptr;
     QPushButton *m_startVoiceButton = nullptr;
     QPushButton *m_stopVoiceButton = nullptr;
     QSoundEffect *m_reminderSound = nullptr;

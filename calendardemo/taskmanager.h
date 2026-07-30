@@ -13,7 +13,7 @@ public:
                  const QString &note = QString());
     bool updateTask(const QString &id, const QString &name, const QDateTime &start,
                     Priority priority, Category category, const QDateTime &remind,
-                    QString *errorMessage);
+                    QString *errorMessage, const QString *note = nullptr);
     bool deleteTask(const QString &id);
     QList<Task> tasksForDate(const QDate &date) const;
     QList<Task> allTasks() const;

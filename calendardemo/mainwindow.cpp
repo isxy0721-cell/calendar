@@ -148,6 +148,8 @@ void MainWindow::buildSchedulePage()
     auto *todayButton = new QPushButton(QStringLiteral("今天"));
     filterLayout->addWidget(todayButton);
     filterLayout->addStretch();
+    m_editButton = new QPushButton(QStringLiteral("修改选中任务"));
+    filterLayout->addWidget(m_editButton);
     m_deleteButton = new QPushButton(QStringLiteral("删除选中任务"));
     filterLayout->addWidget(m_deleteButton);
     layout->addLayout(filterLayout);
@@ -165,6 +167,7 @@ void MainWindow::buildSchedulePage()
     layout->addWidget(m_taskTable);
     connect(addButton, &QPushButton::clicked, this, &MainWindow::showAddTaskDialog);
     connect(searchButton, &QPushButton::clicked, this, &MainWindow::toggleTaskSearch);
+    connect(m_editButton, &QPushButton::clicked, this, &MainWindow::showEditTaskDialog);
     connect(m_deleteButton, &QPushButton::clicked, this, &MainWindow::deleteTask);
     connect(m_filterDateEdit, &QDateEdit::dateChanged, this, &MainWindow::refreshTable);
     connect(m_searchEdit, &QLineEdit::textChanged, this, &MainWindow::refreshTable);
@@ -287,6 +290,79 @@ void MainWindow::showAddTaskDialog()
     m_categoryBox = nullptr;
     m_startVoiceButton = nullptr;
     m_stopVoiceButton = nullptr;
+}
+
+void MainWindow::showEditTaskDialog()
+{
+    const int row = m_taskTable->currentRow();
+    if (row < 0) {
+        QMessageBox::information(this, QStringLiteral("提示"), QStringLiteral("请先选择一条任务。"));
+        return;
+    }
+
+    const QString id = m_taskTable->item(row, 0)->text();
+    Task task;
+    bool found = false;
+    for (const Task &item : m_taskManager.allTasks()) {
+        if (item.id() == id) {
+            task = item;
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        QMessageBox::warning(this, QStringLiteral("修改失败"), QStringLiteral("未找到该任务。"));
+        return;
+    }
+
+    QDialog dialog(this);
+    dialog.setWindowTitle(QStringLiteral("修改任务"));
+    dialog.setMinimumWidth(460);
+    auto *layout = new QVBoxLayout(&dialog);
+    auto *form = new QFormLayout;
+    auto *nameEdit = new QLineEdit(task.name());
+    auto *startEdit = new QDateTimeEdit(task.startTime());
+    auto *remindEdit = new QDateTimeEdit(task.remindTime());
+    for (QDateTimeEdit *edit : {startEdit, remindEdit}) {
+        edit->setCalendarPopup(true);
+        edit->setDisplayFormat(QStringLiteral("yyyy-MM-dd HH:mm"));
+    }
+    auto *priorityBox = new QComboBox;
+    priorityBox->addItems({QStringLiteral("中（默认）"), QStringLiteral("高"), QStringLiteral("低")});
+    priorityBox->setCurrentIndex(task.priority() == Priority::High ? 1 : task.priority() == Priority::Low ? 2 : 0);
+    auto *categoryBox = new QComboBox;
+    categoryBox->addItems({QStringLiteral("生活（默认）"), QStringLiteral("学习"), QStringLiteral("娱乐")});
+    categoryBox->setCurrentIndex(task.category() == Category::Study ? 1 : task.category() == Category::Entertainment ? 2 : 0);
+    auto *noteEdit = new QPlainTextEdit(task.note());
+    noteEdit->setFixedHeight(84);
+    form->addRow(QStringLiteral("任务名称："), nameEdit);
+    form->addRow(QStringLiteral("启动时间："), startEdit);
+    form->addRow(QStringLiteral("提醒时间："), remindEdit);
+    form->addRow(QStringLiteral("优先级："), priorityBox);
+    form->addRow(QStringLiteral("分类："), categoryBox);
+    form->addRow(QStringLiteral("备注："), noteEdit);
+    layout->addLayout(form);
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Cancel);
+    auto *saveButton = buttons->addButton(QStringLiteral("保存修改"), QDialogButtonBox::AcceptRole);
+    layout->addWidget(buttons);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    connect(saveButton, &QPushButton::clicked, this, [this, &dialog, id, nameEdit, startEdit, remindEdit, priorityBox, categoryBox, noteEdit] {
+        const Priority priority = priorityBox->currentIndex() == 1 ? Priority::High
+                                : priorityBox->currentIndex() == 2 ? Priority::Low : Priority::Medium;
+        const Category category = categoryBox->currentIndex() == 1 ? Category::Study
+                                : categoryBox->currentIndex() == 2 ? Category::Entertainment : Category::Life;
+        const QString note = noteEdit->toPlainText();
+        QString error;
+        if (!m_taskManager.updateTask(id, nameEdit->text(), startEdit->dateTime(), priority,
+                                      category, remindEdit->dateTime(), &error, &note)) {
+            QMessageBox::warning(this, QStringLiteral("修改失败"), error);
+            return;
+        }
+        refreshTable();
+        updateWorkerTasks();
+        dialog.accept();
+    });
+    dialog.exec();
 }
 
 void MainWindow::deleteTask()
