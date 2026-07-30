@@ -72,6 +72,21 @@ bool TaskManager::deleteTask(const QString &id)
     return false;
 }
 
+bool TaskManager::deleteTaskByNameAndStart(const QString &name, const QDateTime &start,
+                                           QString *errorMessage)
+{
+    const QString trimmedName = name.trimmed();
+    for (const Task &task : m_tasks) {
+        if (task.name() == trimmedName && task.startTime() == start) {
+            if (deleteTask(task.id())) return true;
+            if (errorMessage) *errorMessage = QStringLiteral("保存任务文件失败。");
+            return false;
+        }
+    }
+    if (errorMessage) *errorMessage = QStringLiteral("未找到指定名称和启动时间的任务。");
+    return false;
+}
+
 bool TaskManager::updateTask(const QString &id, const QString &name, const QDateTime &start,
                              Priority priority, Category category, const QDateTime &remind,
                              QString *errorMessage, const QString *note)
@@ -100,6 +115,23 @@ bool TaskManager::updateTask(const QString &id, const QString &name, const QDate
     if (save()) return true;
     m_tasks[index] = original;
     if (errorMessage) *errorMessage = QStringLiteral("保存任务文件失败。");
+    return false;
+}
+
+bool TaskManager::updateTaskByNameAndStart(const QString &oldName, const QDateTime &oldStart,
+                                           const QString &newName, const QDateTime &newStart,
+                                           Priority priority, Category category,
+                                           const QDateTime &remind, QString *errorMessage,
+                                           const QString *note)
+{
+    const QString trimmedOldName = oldName.trimmed();
+    for (const Task &task : m_tasks) {
+        if (task.name() == trimmedOldName && task.startTime() == oldStart) {
+            return updateTask(task.id(), newName, newStart, priority, category, remind,
+                              errorMessage, note);
+        }
+    }
+    if (errorMessage) *errorMessage = QStringLiteral("未找到指定名称和启动时间的任务。");
     return false;
 }
 

@@ -25,19 +25,20 @@ void printHelp()
            "  myschedule --help\n"
            "  myschedule register <用户名> <口令>\n"
            "  myschedule <用户名> <口令> addtask <任务名> <启动时间> [优先级] [分类] [提醒时间]\n"
-           "  myschedule <用户名> <口令> updatetask <任务ID> <任务名> <启动时间> [优先级] [分类] [提醒时间]\n"
+           "  myschedule <用户名> <口令> updatetask <原任务名> <原启动时间> <新任务名> <新启动时间> [优先级] [分类] [提醒时间]\n"
            "  myschedule <用户名> <口令> showtask [日期]\n"
            "  myschedule <用户名> <口令> searchtask <任务名称>\n"
-           "  myschedule <用户名> <口令> deltask <任务ID>\n"
+           "  myschedule <用户名> <口令> deltask <任务名> <启动时间>\n"
            "  myschedule run [用户名 口令]\n\n"
            "时间格式：yyyy-MM-ddTHH:mm，例如 2026-07-27T19:30。\n"
            "优先级：high、medium（默认）、low。分类：study、entertainment、life（默认）。\n\n"
            "示例：\n"
            "  myschedule register user1 password\n"
            "  myschedule user1 password addtask \"学习 Qt\" 2026-07-27T19:30 high study 2026-07-27T19:25\n"
-           "  myschedule user1 password updatetask <任务ID> \"复习 Qt\" 2026-07-27T20:00 medium study\n"
+           "  myschedule user1 password updatetask \"学习 Qt\" 2026-07-27T19:30 \"复习 Qt\" 2026-07-27T20:00 medium study\n"
            "  myschedule user1 password showtask 2026-07-27\n"
            "  myschedule user1 password searchtask \"Qt\"\n"
+           "  myschedule user1 password deltask \"复习 Qt\" 2026-07-27T20:00\n"
            "  myschedule run user1 password\n");
     out.flush();
 }
@@ -72,15 +73,13 @@ Category parseCategory(const QString &text, bool *ok)
 void printTasks(const QList<Task> &tasks)
 {
     const auto cell = [](const QString &text, int width) { return text.leftJustified(width, ' '); };
-    out << cell(QStringLiteral("任务ID"), 36) << "  "
-        << cell(QStringLiteral("任务名称"), 18) << "  "
+    out << cell(QStringLiteral("任务名称"), 18) << "  "
         << cell(QStringLiteral("启动时间"), 16) << "  "
         << cell(QStringLiteral("提醒时间"), 16) << "  "
         << cell(QStringLiteral("优先级"), 4) << "  " << QStringLiteral("分类") << '\n';
-    out << QString(110, '-') << '\n';
+    out << QString(70, '-') << '\n';
     for (const Task &task : tasks) {
-        out << cell(task.id(), 36) << "  "
-            << cell(task.name(), 18) << "  "
+        out << cell(task.name(), 18) << "  "
             << cell(task.startTime().toString("yyyy-MM-dd HH:mm"), 16) << "  "
             << cell(task.remindTime().toString("yyyy-MM-dd HH:mm"), 16) << "  "
             << cell(task.priorityText(), 4) << "  " << task.categoryText() << '\n';
@@ -115,22 +114,24 @@ bool addTaskFromArguments(const QStringList &arguments, TaskManager &manager)
 
 bool updateTaskFromArguments(const QStringList &arguments, TaskManager &manager)
 {
-    if (arguments.size() < 3 || arguments.size() > 6) {
-        out << QStringLiteral("参数错误：updatetask 需要 <任务ID> <任务名> <启动时间> [优先级] [分类] [提醒时间]。\n");
+    if (arguments.size() < 4 || arguments.size() > 7) {
+        out << QStringLiteral("参数错误：updatetask 需要 <原任务名> <原启动时间> <新任务名> <新启动时间> [优先级] [分类] [提醒时间]。\n");
         return false;
     }
-    const QDateTime start = parseDateTime(arguments.at(2));
+    const QDateTime oldStart = parseDateTime(arguments.at(1));
+    const QDateTime newStart = parseDateTime(arguments.at(3));
     bool priorityOk = false;
     bool categoryOk = false;
-    const Priority priority = parsePriority(arguments.value(3), &priorityOk);
-    const Category category = parseCategory(arguments.value(4), &categoryOk);
-    const QDateTime reminder = arguments.size() >= 6 ? parseDateTime(arguments.at(5)) : start.addSecs(-300);
-    if (!start.isValid() || !reminder.isValid() || !priorityOk || !categoryOk) {
+    const Priority priority = parsePriority(arguments.value(4), &priorityOk);
+    const Category category = parseCategory(arguments.value(5), &categoryOk);
+    const QDateTime reminder = arguments.size() >= 7 ? parseDateTime(arguments.at(6)) : newStart.addSecs(-300);
+    if (!oldStart.isValid() || !newStart.isValid() || !reminder.isValid() || !priorityOk || !categoryOk) {
         out << QStringLiteral("时间、优先级或分类格式无效。\n");
         return false;
     }
     QString error;
-    if (!manager.updateTask(arguments.at(0), arguments.at(1), start, priority, category, reminder, &error)) {
+    if (!manager.updateTaskByNameAndStart(arguments.at(0), oldStart, arguments.at(2), newStart,
+                                          priority, category, reminder, &error)) {
         out << QStringLiteral("更新失败：") << error << '\n';
         return false;
     }
@@ -172,8 +173,15 @@ bool executeLoggedInCommand(const QStringList &arguments, TaskManager &manager)
         return true;
     }
     if (command == "deltask") {
-        if (arguments.size() != 2) { out << QStringLiteral("用法：deltask <任务ID>\n"); return false; }
-        out << (manager.deleteTask(arguments.at(1)) ? QStringLiteral("任务已删除。\n") : QStringLiteral("删除失败：未找到任务或文件无法保存。\n"));
+        if (arguments.size() != 3) { out << QStringLiteral("用法：deltask <任务名> <启动时间>\n"); return false; }
+        const QDateTime start = parseDateTime(arguments.at(2));
+        if (!start.isValid()) { out << QStringLiteral("启动时间格式无效。\n"); return false; }
+        QString error;
+        if (!manager.deleteTaskByNameAndStart(arguments.at(1), start, &error)) {
+            out << QStringLiteral("删除失败：") << error << '\n';
+            return false;
+        }
+        out << QStringLiteral("任务已删除。\n");
         return true;
     }
     out << QStringLiteral("未知命令。输入 help 查看帮助。\n");

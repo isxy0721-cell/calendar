@@ -15,6 +15,12 @@ public:
                     Priority priority, Category category, const QDateTime &remind,
                     QString *errorMessage, const QString *note = nullptr);
     bool deleteTask(const QString &id);
+    bool updateTaskByNameAndStart(const QString &oldName, const QDateTime &oldStart,
+                                  const QString &newName, const QDateTime &newStart,
+                                  Priority priority, Category category, const QDateTime &remind,
+                                  QString *errorMessage, const QString *note = nullptr);
+    bool deleteTaskByNameAndStart(const QString &name, const QDateTime &start,
+                                  QString *errorMessage);
     QList<Task> tasksForDate(const QDate &date) const;
     QList<Task> allTasks() const;
 
