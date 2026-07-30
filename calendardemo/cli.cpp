@@ -17,7 +17,8 @@ QTextStream in(stdin);
 
 void printHelp()
 {
-    out << "日程管理程序（无参数启动图形界面）\n\n"
+    // QTextStream 的 const char* 输出会按 Latin-1 解释；中文必须以 QString 输出。
+    out << QStringLiteral("日程管理程序（无参数启动图形界面）\n\n"
            "命令：\n"
            "  myschedule --help\n"
            "  myschedule register <用户名> <口令>\n"
@@ -33,7 +34,7 @@ void printHelp()
            "  myschedule user1 password addtask \"学习 Qt\" 2026-07-27T19:30 high study 2026-07-27T19:25\n"
            "  myschedule user1 password updatetask <任务ID> \"复习 Qt\" 2026-07-27T20:00 medium study\n"
            "  myschedule user1 password showtask 2026-07-27\n"
-           "  myschedule run user1 password\n";
+           "  myschedule run user1 password\n");
     out.flush();
 }
 
@@ -86,7 +87,7 @@ void printTasks(const QList<Task> &tasks)
 bool addTaskFromArguments(const QStringList &arguments, TaskManager &manager)
 {
     if (arguments.size() < 2 || arguments.size() > 5) {
-        out << "参数错误：addtask 需要 <任务名> <启动时间> [优先级] [分类] [提醒时间]。\n";
+        out << QStringLiteral("参数错误：addtask 需要 <任务名> <启动时间> [优先级] [分类] [提醒时间]。\n");
         return false;
     }
     const QDateTime start = parseDateTime(arguments.at(1));
@@ -96,22 +97,22 @@ bool addTaskFromArguments(const QStringList &arguments, TaskManager &manager)
     const Category category = parseCategory(arguments.value(3), &categoryOk);
     const QDateTime reminder = arguments.size() >= 5 ? parseDateTime(arguments.at(4)) : start.addSecs(-300);
     if (!start.isValid() || !reminder.isValid() || !priorityOk || !categoryOk) {
-        out << "时间、优先级或分类格式无效。\n";
+        out << QStringLiteral("时间、优先级或分类格式无效。\n");
         return false;
     }
     QString error;
     if (!manager.addTask(arguments.at(0), start, priority, category, reminder, &error)) {
-        out << "添加失败：" << error << '\n';
+        out << QStringLiteral("添加失败：") << error << '\n';
         return false;
     }
-    out << "任务已保存。\n";
+    out << QStringLiteral("任务已保存。\n");
     return true;
 }
 
 bool updateTaskFromArguments(const QStringList &arguments, TaskManager &manager)
 {
     if (arguments.size() < 3 || arguments.size() > 6) {
-        out << "参数错误：updatetask 需要 <任务ID> <任务名> <启动时间> [优先级] [分类] [提醒时间]。\n";
+        out << QStringLiteral("参数错误：updatetask 需要 <任务ID> <任务名> <启动时间> [优先级] [分类] [提醒时间]。\n");
         return false;
     }
     const QDateTime start = parseDateTime(arguments.at(2));
@@ -121,15 +122,15 @@ bool updateTaskFromArguments(const QStringList &arguments, TaskManager &manager)
     const Category category = parseCategory(arguments.value(4), &categoryOk);
     const QDateTime reminder = arguments.size() >= 6 ? parseDateTime(arguments.at(5)) : start.addSecs(-300);
     if (!start.isValid() || !reminder.isValid() || !priorityOk || !categoryOk) {
-        out << "时间、优先级或分类格式无效。\n";
+        out << QStringLiteral("时间、优先级或分类格式无效。\n");
         return false;
     }
     QString error;
     if (!manager.updateTask(arguments.at(0), arguments.at(1), start, priority, category, reminder, &error)) {
-        out << "更新失败：" << error << '\n';
+        out << QStringLiteral("更新失败：") << error << '\n';
         return false;
     }
-    out << "任务已更新并保存。\n";
+    out << QStringLiteral("任务已更新并保存。\n");
     return true;
 }
 
@@ -141,16 +142,16 @@ bool executeLoggedInCommand(const QStringList &arguments, TaskManager &manager)
     if (command == "updatetask") return updateTaskFromArguments(arguments.mid(1), manager);
     if (command == "showtask") {
         const QDate date = arguments.size() >= 2 ? QDate::fromString(arguments.at(1), Qt::ISODate) : QDate::currentDate();
-        if (!date.isValid()) { out << "日期格式无效，应为 yyyy-MM-dd。\n"; return false; }
+        if (!date.isValid()) { out << QStringLiteral("日期格式无效，应为 yyyy-MM-dd。\n"); return false; }
         printTasks(manager.tasksForDate(date));
         return true;
     }
     if (command == "deltask") {
-        if (arguments.size() != 2) { out << "用法：deltask <任务ID>\n"; return false; }
-        out << (manager.deleteTask(arguments.at(1)) ? "任务已删除。\n" : "删除失败：未找到任务或文件无法保存。\n");
+        if (arguments.size() != 2) { out << QStringLiteral("用法：deltask <任务ID>\n"); return false; }
+        out << (manager.deleteTask(arguments.at(1)) ? QStringLiteral("任务已删除。\n") : QStringLiteral("删除失败：未找到任务或文件无法保存。\n"));
         return true;
     }
-    out << "未知命令。输入 help 查看帮助。\n";
+    out << QStringLiteral("未知命令。输入 help 查看帮助。\n");
     return false;
 }
 
@@ -165,14 +166,15 @@ int runShell(const QString &username, TaskManager &manager)
     QObject::connect(&reminderThread, &QThread::finished, worker, &QObject::deleteLater);
     QObject::connect(worker, &ReminderWorker::reminderDue, [](const Task &task) {
         QTextStream notice(stdout);
-        notice << "\n[任务提醒] " << task.name() << "，开始时间："
+        notice.setCodec("UTF-8");
+        notice << QStringLiteral("\n[任务提醒] ") << task.name() << QStringLiteral("，开始时间：")
                << task.startTime().toString("yyyy-MM-dd HH:mm") << '\n' << "> ";
         notice.flush();
     });
     reminderThread.start();
     QMetaObject::invokeMethod(worker, "setTasks", Qt::QueuedConnection, Q_ARG(QList<Task>, manager.allTasks()));
 
-    out << "欢迎，" << username << "。输入 help 查看命令，exit 退出。\n> ";
+    out << QStringLiteral("欢迎，") << username << QStringLiteral("。输入 help 查看命令，exit 退出。\n> ");
     out.flush();
     while (true) {
         const QString line = in.readLine().trimmed();
@@ -210,7 +212,7 @@ int runCommandLine(QCoreApplication &application)
     UserManager users;
     if (args.first() == "register") {
         if (args.size() != 3) { printHelp(); return 1; }
-        out << (users.registerUser(args.at(1), args.at(2)) ? "注册成功。\n" : "注册失败：用户名或口令为空，或用户名已存在。\n");
+        out << (users.registerUser(args.at(1), args.at(2)) ? QStringLiteral("注册成功。\n") : QStringLiteral("注册失败：用户名或口令为空，或用户名已存在。\n"));
         return 0;
     }
 
@@ -219,17 +221,17 @@ int runCommandLine(QCoreApplication &application)
     if (args.first() == "run") {
         if (args.size() == 3) { username = args.at(1); password = args.at(2); }
         else if (args.size() == 1) {
-            out << "用户名："; out.flush(); username = in.readLine().trimmed();
-            out << "口令："; out.flush(); password = in.readLine();
+            out << QStringLiteral("用户名："); out.flush(); username = in.readLine().trimmed();
+            out << QStringLiteral("口令："); out.flush(); password = in.readLine();
         } else { printHelp(); return 1; }
-        if (!users.login(username, password)) { out << "登录失败：用户名或口令不正确。\n"; return 1; }
+        if (!users.login(username, password)) { out << QStringLiteral("登录失败：用户名或口令不正确。\n"); return 1; }
         TaskManager manager;
         manager.load(username);
         return runShell(username, manager);
     }
 
     if (args.size() < 3 || !users.login(args.at(0), args.at(1))) {
-        out << "登录失败，或命令参数不完整。\n";
+        out << QStringLiteral("登录失败，或命令参数不完整。\n");
         return 1;
     }
     TaskManager manager;
