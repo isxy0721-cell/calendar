@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Linux 命令行压力测试：注册、批量新增、查询、更新、删除。
+# Linux 命令行压力测试：注册、批量新增、按名称查询、按名称和启动时间更新、删除。
 # 用法：./tests/cli_stress_test.sh /绝对路径/myschedule [--count 1000] [--keep-data]
 set -euo pipefail
 
@@ -59,21 +59,26 @@ while [ "$task_index" -lt "$COUNT" ]; do
     task_index=$((task_index + 1))
 done
 
-echo "[3/5] 查询首日任务"
+echo "[3/5] 查询首日任务，并按名称查找首条任务"
 QUERY_OUTPUT="$("$APP" "$USER_NAME" "$PASSWORD" showtask 2030-01-01)"
-FIRST_ID="$(printf '%s\n' "$QUERY_OUTPUT" | awk 'NR == 3 {print $1}')"
-if [[ ! "$FIRST_ID" =~ ^[0-9a-fA-F-]{36}$ ]]; then
-    echo "无法从查询结果取得任务 ID：" >&2
+if ! printf '%s\n' "$QUERY_OUTPUT" | grep -Fq "stress-task-0000"; then
+    echo "查询验证失败：未找到首条任务" >&2
     printf '%s\n' "$QUERY_OUTPUT" >&2
     exit 1
 fi
+SEARCH_OUTPUT="$("$APP" "$USER_NAME" "$PASSWORD" searchtask "stress-task-0000")"
+if ! printf '%s\n' "$SEARCH_OUTPUT" | grep -Fq "stress-task-0000"; then
+    echo "名称查找验证失败：未找到首条任务" >&2
+    printf '%s\n' "$SEARCH_OUTPUT" >&2
+    exit 1
+fi
 
-echo "[4/5] 更新首条任务"
-"$APP" "$USER_NAME" "$PASSWORD" updatetask "$FIRST_ID" "stress-task-updated" \
-    2030-01-02T08:00 high life 2030-01-02T07:55 >/dev/null
+echo "[4/5] 根据任务名称和启动时间更新首条任务"
+"$APP" "$USER_NAME" "$PASSWORD" updatetask "stress-task-0000" 2030-01-01T08:00 \
+    "stress-task-updated" 2030-01-02T08:00 high life 2030-01-02T07:55 >/dev/null
 
-echo "[5/5] 删除已更新任务并验证"
-"$APP" "$USER_NAME" "$PASSWORD" deltask "$FIRST_ID" >/dev/null
+echo "[5/5] 根据任务名称和启动时间删除已更新任务并验证"
+"$APP" "$USER_NAME" "$PASSWORD" deltask "stress-task-updated" 2030-01-02T08:00 >/dev/null
 VERIFY_OUTPUT="$("$APP" "$USER_NAME" "$PASSWORD" showtask 2030-01-02)"
 if printf '%s\n' "$VERIFY_OUTPUT" | grep -Fq "stress-task-updated"; then
     echo "删除验证失败：任务仍然存在" >&2
