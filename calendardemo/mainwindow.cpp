@@ -57,10 +57,13 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     m_reminderWorker = new ReminderWorker;
     m_reminderWorker->moveToThread(&m_reminderThread);
     connect(&m_reminderThread, &QThread::started, m_reminderWorker, &ReminderWorker::start);
+    // worker 内部的 QTimer 必须在提醒线程中销毁，不能在线程结束后由主线程 delete。
+    connect(&m_reminderThread, &QThread::finished, m_reminderWorker, &QObject::deleteLater);
     connect(m_reminderWorker, &ReminderWorker::reminderDue, this, &MainWindow::showReminder);
     m_reminderThread.start();
     m_voskTranscriber = new VoskTranscriber;
     m_voskTranscriber->moveToThread(&m_voskThread);
+    connect(&m_voskThread, &QThread::finished, m_voskTranscriber, &QObject::deleteLater);
     connect(m_voskTranscriber, &VoskTranscriber::transcriptionFinished,
             this, &MainWindow::voskTranscriptionFinished);
     m_voskThread.start();
@@ -70,10 +73,10 @@ MainWindow::~MainWindow()
 {
     m_reminderThread.quit();
     m_reminderThread.wait();
-    delete m_reminderWorker;
+    m_reminderWorker = nullptr;
     m_voskThread.quit();
     m_voskThread.wait();
-    delete m_voskTranscriber;
+    m_voskTranscriber = nullptr;
 }
 
 void MainWindow::buildLoginPage()

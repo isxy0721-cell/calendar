@@ -157,19 +157,20 @@ bool executeLoggedInCommand(const QStringList &arguments, TaskManager &manager)
 int runShell(const QString &username, TaskManager &manager)
 {
     QThread reminderThread;
-    ReminderWorker worker;
+    auto *worker = new ReminderWorker;
     qRegisterMetaType<Task>("Task");
     qRegisterMetaType<QList<Task>>("QList<Task>");
-    worker.moveToThread(&reminderThread);
-    QObject::connect(&reminderThread, &QThread::started, &worker, &ReminderWorker::start);
-    QObject::connect(&worker, &ReminderWorker::reminderDue, [](const Task &task) {
+    worker->moveToThread(&reminderThread);
+    QObject::connect(&reminderThread, &QThread::started, worker, &ReminderWorker::start);
+    QObject::connect(&reminderThread, &QThread::finished, worker, &QObject::deleteLater);
+    QObject::connect(worker, &ReminderWorker::reminderDue, [](const Task &task) {
         QTextStream notice(stdout);
         notice << "\n[任务提醒] " << task.name() << "，开始时间："
                << task.startTime().toString("yyyy-MM-dd HH:mm") << '\n' << "> ";
         notice.flush();
     });
     reminderThread.start();
-    QMetaObject::invokeMethod(&worker, "setTasks", Qt::QueuedConnection, Q_ARG(QList<Task>, manager.allTasks()));
+    QMetaObject::invokeMethod(worker, "setTasks", Qt::QueuedConnection, Q_ARG(QList<Task>, manager.allTasks()));
 
     out << "欢迎，" << username << "。输入 help 查看命令，exit 退出。\n> ";
     out.flush();
@@ -182,7 +183,7 @@ int runShell(const QString &username, TaskManager &manager)
         if (command.first().toLower() == "help") printHelp();
         else {
             executeLoggedInCommand(command, manager);
-            QMetaObject::invokeMethod(&worker, "setTasks", Qt::QueuedConnection, Q_ARG(QList<Task>, manager.allTasks()));
+            QMetaObject::invokeMethod(worker, "setTasks", Qt::QueuedConnection, Q_ARG(QList<Task>, manager.allTasks()));
         }
         out << "> ";
         out.flush();
@@ -196,6 +197,11 @@ int runShell(const QString &username, TaskManager &manager)
 
 int runCommandLine(QCoreApplication &application)
 {
+    // Qt5 的 QTextStream 默认使用本地编码。命令行任务名和提示包含中文，
+    // 因此明确使用 UTF-8，避免 Linux/Windows 终端显示或输入乱码。
+    out.setCodec("UTF-8");
+    in.setCodec("UTF-8");
+
     const QStringList args = application.arguments().mid(1);
     if (args.isEmpty() || args.first() == "--help" || args.first() == "-h" || args.first() == "help") {
         printHelp();
