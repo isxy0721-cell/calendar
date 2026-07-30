@@ -342,10 +342,26 @@ void MainWindow::showEditTaskDialog()
     form->addRow(QStringLiteral("分类："), categoryBox);
     form->addRow(QStringLiteral("备注："), noteEdit);
     layout->addLayout(form);
+
+    // 复用新增任务窗口的语音输入逻辑：识别结果会追加到任务名称后面。
+    m_taskNameEdit = nameEdit;
+    m_startVoiceButton = new QPushButton(QStringLiteral("开始语音输入"));
+    m_stopVoiceButton = new QPushButton(QStringLiteral("结束并识别"));
+    m_stopVoiceButton->setEnabled(false);
+    auto *voiceLayout = new QHBoxLayout;
+    voiceLayout->addWidget(m_startVoiceButton);
+    voiceLayout->addWidget(m_stopVoiceButton);
+    layout->addLayout(voiceLayout);
+
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Cancel);
     auto *saveButton = buttons->addButton(QStringLiteral("保存修改"), QDialogButtonBox::AcceptRole);
     layout->addWidget(buttons);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    connect(m_startVoiceButton, &QPushButton::clicked, this, &MainWindow::startVoiceInput);
+    connect(m_stopVoiceButton, &QPushButton::clicked, this, &MainWindow::stopVoiceInput);
+    connect(buttons, &QDialogButtonBox::rejected, this, [this, &dialog] {
+        if (m_voiceListening) stopVoiceInput();
+        dialog.reject();
+    });
     connect(saveButton, &QPushButton::clicked, this, [this, &dialog, id, nameEdit, startEdit, remindEdit, priorityBox, categoryBox, noteEdit] {
         const Priority priority = priorityBox->currentIndex() == 1 ? Priority::High
                                 : priorityBox->currentIndex() == 2 ? Priority::Low : Priority::Medium;
@@ -363,6 +379,9 @@ void MainWindow::showEditTaskDialog()
         dialog.accept();
     });
     dialog.exec();
+    m_taskNameEdit = nullptr;
+    m_startVoiceButton = nullptr;
+    m_stopVoiceButton = nullptr;
 }
 
 void MainWindow::deleteTask()
